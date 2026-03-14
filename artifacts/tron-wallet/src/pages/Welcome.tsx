@@ -36,8 +36,8 @@ export function Welcome() {
           transition={{ delay: 0.2 }}
           className="text-center mb-12"
         >
-          <h1 className="text-4xl font-display font-bold mb-4 text-gradient">
-            Gasless TRON<br />USDT Wallet
+          <h1 className="text-5xl font-display font-bold mb-4 text-gradient">
+            gasless.one
           </h1>
           <p className="text-muted-foreground text-lg">
             Secure, anonymous, and browser-based. <br />No emails. No passwords. No servers.

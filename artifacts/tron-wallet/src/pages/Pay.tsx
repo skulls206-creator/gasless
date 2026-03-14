@@ -95,7 +95,7 @@ export function Pay() {
 
     // Launch with TRON USDT pre-selected and deposit address pre-filled
     sdkRef.current.onramp({
-      referrer: "TRON USDT Wallet",
+      referrer: "gasless.one",
       callbackUrl: window.location.origin,
       toToken: TRON_USDT_TOKEN,
       ...(address ? { recipientAddress: address } : {}),
