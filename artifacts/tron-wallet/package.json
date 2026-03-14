@@ -75,8 +75,10 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@zkp2p/sdk": "0.1.0-rc.14",
     "crypto-js": "^4.2.0",
     "qrcode.react": "^4.2.0",
-    "tronweb": "^6.2.2"
+    "tronweb": "^6.2.2",
+    "viem": "^2.47.2"
   }
 }
