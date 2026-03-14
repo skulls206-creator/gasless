@@ -1,4 +1,4 @@
-import TronWeb from "tronweb";
+import { TronWeb } from "tronweb";
 
 export const USDT_CONTRACT_ADDRESS = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 export const TRONGRID_API_URL = "https://api.trongrid.io";
