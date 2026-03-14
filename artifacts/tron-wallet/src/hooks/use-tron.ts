@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getTronWeb, USDT_CONTRACT_ADDRESS, TRONGRID_API_URL } from "@/lib/tron";
+import { getTronWeb, getUSDTBalance, USDT_CONTRACT_ADDRESS, TRONGRID_API_URL } from "@/lib/tron";
 
 export interface TronResources {
   freeNetLimit: number;
@@ -27,27 +27,9 @@ export interface Trc20Transaction {
 export function useUSDTBalance(address: string | null) {
   return useQuery({
     queryKey: ["usdt-balance", address],
-    queryFn: async () => {
-      if (!address) return 0;
-      
-      try {
-        const res = await fetch(`${TRONGRID_API_URL}/v1/accounts/${address}`);
-        const json = await res.json();
-        
-        if (!json.success || !json.data || json.data.length === 0) return 0;
-        
-        const trc20 = json.data[0].trc20 || [];
-        for (const token of trc20) {
-          const keys = Object.keys(token);
-          if (keys[0] === USDT_CONTRACT_ADDRESS) {
-            return parseFloat(token[keys[0]]) / 1_000_000;
-          }
-        }
-        return 0;
-      } catch (err) {
-        console.error("Failed to fetch balance:", err);
-        return 0;
-      }
+    queryFn: () => {
+      if (!address) return Promise.resolve(0);
+      return getUSDTBalance(address);
     },
     enabled: !!address,
     refetchInterval: 15000,

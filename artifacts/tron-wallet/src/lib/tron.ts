@@ -17,6 +17,49 @@ export function getTronWeb(privateKey?: string) {
   return new TronWeb(config);
 }
 
+// Encode a base58 address into a zero-padded 32-byte ABI parameter string
+function encodeAddressParam(tronWeb: InstanceType<typeof TronWeb>, address: string): string {
+  const hexWithPrefix: string = tronWeb.address.toHex(address); // 41...
+  const hexWithout41 = hexWithPrefix.slice(2); // strip leading '41'
+  return hexWithout41.padStart(64, "0");
+}
+
+/**
+ * Query USDT balance via triggerConstantContract (works even for accounts
+ * that have never held TRX, which the /v1/accounts REST endpoint misses).
+ */
+export async function getUSDTBalance(address: string): Promise<number> {
+  try {
+    const tronWeb = getTronWeb();
+    const parameter = encodeAddressParam(tronWeb, address);
+
+    const body = {
+      owner_address: address,
+      contract_address: USDT_CONTRACT_ADDRESS,
+      function_selector: "balanceOf(address)",
+      parameter,
+      visible: true,
+    };
+
+    const res = await fetch(`${TRONGRID_API_URL}/wallet/triggerconstantcontract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const json = await res.json();
+
+    const hex: string = json?.constant_result?.[0];
+    if (!hex) return 0;
+
+    const balanceSun = parseInt(hex, 16);
+    return isNaN(balanceSun) ? 0 : balanceSun / 1_000_000;
+  } catch (err) {
+    console.error("getUSDTBalance failed:", err);
+    return 0;
+  }
+}
+
 export async function validateAddress(address: string): Promise<boolean> {
   const tronWeb = getTronWeb();
   return tronWeb.isAddress(address);
