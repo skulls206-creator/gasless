@@ -83,18 +83,23 @@ export function useUSDTTransactions(address: string | null) {
     queryKey: ["usdt-transactions", address],
     queryFn: async () => {
       if (!address) return [];
-      
+
       const res = await fetch(
-        `${TRONGRID_API_URL}/v1/accounts/${address}/transactions/trc20?contract_address=${USDT_CONTRACT_ADDRESS}&limit=20`
+        `${TRONGRID_API_URL}/v1/accounts/${address}/transactions/trc20?contract_address=${USDT_CONTRACT_ADDRESS}&limit=50&only_confirmed=true`
       );
+
+      if (!res.ok) throw new Error(`TronGrid returned ${res.status}`);
+
       const json = await res.json();
-      
-      if (!json.success) return [];
-      
-      return json.data as Trc20Transaction[];
+
+      // Accept data even when success flag is absent or false — TronGrid can
+      // set success:false on rate-limited responses while still returning data.
+      const rows = Array.isArray(json.data) ? json.data : [];
+      return rows as Trc20Transaction[];
     },
     enabled: !!address,
-    refetchInterval: 30000,
+    refetchInterval: 20000,
+    retry: 3,
   });
 }
 
