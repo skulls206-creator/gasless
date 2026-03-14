@@ -1,0 +1,105 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { useWallet } from "@/context/WalletContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { formatAccountNumberInput } from "@/lib/utils";
+import { Lock, ArrowRight } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { motion } from "framer-motion";
+
+export function Login() {
+  const [, setLocation] = useLocation();
+  const { login } = useWallet();
+  const { toast } = useToast();
+  
+  const [accountNum, setAccountNum] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (accountNum.length !== 23) { // 20 digits + 3 dashes
+      toast({ variant: "destructive", title: "Incomplete account number" });
+      return;
+    }
+
+    setIsLoading(true);
+    setTimeout(() => {
+      const success = login(accountNum);
+      setIsLoading(false);
+      
+      if (success) {
+        toast({ title: "Welcome back!" });
+        setLocation("/dashboard");
+      } else {
+        toast({ 
+          variant: "destructive", 
+          title: "Access Denied", 
+          description: "Incorrect account number or wallet data corrupted." 
+        });
+      }
+    }, 600);
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col p-6 bg-background">
+      {/* Background Visuals */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40">
+        <img 
+          src={`${import.meta.env.BASE_URL}images/hero-bg.png`} 
+          alt="Hero Background" 
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-2xl" />
+      </div>
+
+      <div className="relative z-10 flex-1 w-full max-w-md mx-auto flex flex-col justify-center py-12">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-card/80 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl"
+        >
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary/20">
+            <Lock className="w-8 h-8 text-primary" />
+          </div>
+          
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-display font-bold text-foreground mb-2">Unlock Wallet</h1>
+            <p className="text-muted-foreground text-sm">
+              Enter your 20-digit account number to decrypt your private key locally.
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <Input
+                type="tel"
+                placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+                value={accountNum}
+                onChange={(e) => setAccountNum(formatAccountNumberInput(e.target.value))}
+                className="font-mono text-center text-lg tracking-widest h-16 bg-background border-white/10 focus-visible:border-primary focus-visible:ring-primary/30"
+                maxLength={23}
+              />
+            </div>
+
+            <Button 
+              type="submit" 
+              size="lg" 
+              className="w-full h-14" 
+              disabled={accountNum.length < 23 || isLoading}
+            >
+              {isLoading ? "Decrypting..." : "Unlock"}
+              {!isLoading && <ArrowRight className="w-5 h-5 ml-2" />}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-xs text-muted-foreground">
+              Lost your number? <span className="text-primary/80">Funds cannot be recovered.</span>
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}

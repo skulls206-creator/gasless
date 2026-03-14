@@ -1,0 +1,22 @@
+packages:
+  "framer-motion": "For page transitions and smooth UI animations"
+  "tronweb": "For interacting with the TRON blockchain and executing USDT transfers"
+  "qrcode.react": "For generating wallet address QR codes"
+  "crypto-js": "For AES-256 encryption of the private key in local storage"
+  "@types/crypto-js": "TypeScript definitions for crypto-js"
+  "clsx": "Utility for constructing className strings"
+  "tailwind-merge": "Utility to cleanly merge Tailwind CSS classes"
+
+images:
+  - path: "artifacts/tron-wallet/public/images/logo.png"
+    description: "Minimalist geometric crypto logo mark featuring a stylized hexagon in vibrant TRON red and deep crimson, set against a transparent background."
+    aspect_ratio: "1:1"
+  - path: "artifacts/tron-wallet/public/images/hero-bg.png"
+    description: "Abstract dark mode gradient mesh background with deep black, obsidian, and subtle glowing red and teal light leaks, creating a sleek cyber-premium aesthetic."
+    aspect_ratio: "16:9"
+
+notes:
+  - "The app is a completely client-side wallet using TronWeb and TronGrid public APIs."
+  - "Private keys are encrypted via AES-256 using a randomly generated 20-digit user account number."
+  - "Authentication is handled entirely in localStorage via the encrypted private key and account number."
+  - "USDT TRC20 Contract Address: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"

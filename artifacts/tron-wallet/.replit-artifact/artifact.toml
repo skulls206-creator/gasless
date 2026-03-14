@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "TRON USDT Wallet"
+version = "1.0.0"
+id = "artifacts/tron-wallet"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 20982
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/tron-wallet run dev"
+
+[services.env]
+PORT = "20982"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/tron-wallet", "run", "build"]
+publicDir = "artifacts/tron-wallet/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
