@@ -3,13 +3,13 @@ import { useLocation } from "wouter";
 import { useWallet } from "@/context/WalletContext";
 import { Button } from "@/components/ui/button";
 import { generateAccountNumber } from "@/lib/utils";
-import { Copy, ArrowRight, ShieldAlert, CheckSquare } from "lucide-react";
+import { Copy, ArrowRight, ShieldAlert, CheckSquare, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 
 export function CreateAccount() {
   const [, setLocation] = useLocation();
-  const { createWallet } = useWallet();
+  const { createWallet, hasWallet } = useWallet();
   const { toast } = useToast();
   
   const [accountNum, setAccountNum] = useState("");
@@ -49,6 +49,15 @@ export function CreateAccount() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-6"
         >
+          {hasWallet && (
+            <button
+              onClick={() => setLocation("/login")}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
+            >
+              ← Back to Unlock
+            </button>
+          )}
+
           <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 border border-primary/20">
             <ShieldAlert className="w-8 h-8 text-primary" />
           </div>
@@ -59,6 +68,15 @@ export function CreateAccount() {
               This 20-digit number is your unique key. We use it to encrypt your wallet on this device. <strong className="text-foreground">We cannot recover this for you.</strong>
             </p>
           </div>
+
+          {hasWallet && (
+            <div className="flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-sm text-yellow-400">
+              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+              <p>
+                <strong>This will replace your existing wallet.</strong> Make sure you've backed up your private key from the Backup tab first.
+              </p>
+            </div>
+          )}
 
           <div className="bg-card border border-border p-6 rounded-2xl shadow-xl mt-8">
             <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Your Account Number</p>

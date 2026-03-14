@@ -4,7 +4,7 @@ import { useWallet } from "@/context/WalletContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatAccountNumberInput } from "@/lib/utils";
-import { Lock, ArrowRight } from "lucide-react";
+import { Lock, ArrowRight, PlusCircle, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 
@@ -97,6 +97,26 @@ export function Login() {
             <p className="text-xs text-muted-foreground">
               Lost your number? <span className="text-primary/80">Funds cannot be recovered.</span>
             </p>
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-white/10 space-y-3">
+            <p className="text-xs text-muted-foreground text-center mb-4">Or start fresh</p>
+            <Button
+              variant="outline"
+              className="w-full h-12"
+              onClick={() => setLocation("/create")}
+            >
+              <PlusCircle className="w-4 h-4 mr-2" />
+              Create New Wallet
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full h-12 text-muted-foreground hover:text-foreground"
+              onClick={() => setLocation("/import")}
+            >
+              <Key className="w-4 h-4 mr-2" />
+              Recover from Private Key
+            </Button>
           </div>
         </motion.div>
       </div>

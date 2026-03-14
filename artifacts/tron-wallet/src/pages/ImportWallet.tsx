@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import { useWallet } from "@/context/WalletContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { getAddressFromPrivateKey } from "@/lib/tron";
 
 export function ImportWallet() {
   const [, setLocation] = useLocation();
-  const { importWallet } = useWallet();
+  const { importWallet, hasWallet } = useWallet();
   const { toast } = useToast();
   
   const [step, setStep] = useState<1 | 2>(1);
@@ -47,9 +47,12 @@ export function ImportWallet() {
 
   return (
     <div className="min-h-screen flex flex-col p-6 bg-background">
-      <Link href="/" className="inline-flex items-center text-muted-foreground hover:text-foreground mb-8 mt-4 w-fit">
+      <button
+        onClick={() => setLocation(hasWallet ? "/login" : "/")}
+        className="inline-flex items-center text-muted-foreground hover:text-foreground mb-8 mt-4 w-fit"
+      >
         <ArrowLeft className="w-4 h-4 mr-2" /> Back
-      </Link>
+      </button>
 
       <div className="flex-1 w-full max-w-md mx-auto">
         <div className="w-16 h-16 bg-secondary rounded-2xl flex items-center justify-center mb-6 border border-white/5">
@@ -64,6 +67,15 @@ export function ImportWallet() {
                 Paste your TRON private key below. We will immediately encrypt it with a new account number.
               </p>
             </div>
+
+            {hasWallet && (
+              <div className="flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-sm text-yellow-400">
+                <span className="mt-0.5 shrink-0">⚠️</span>
+                <p>
+                  <strong>This will replace your existing wallet.</strong> Make sure you've backed up your private key from the Backup tab first.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Private Key</label>

@@ -33,16 +33,16 @@ function AuthGuard() {
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    // If not logged in and trying to access private routes
+    const publicRoutes = ["/", "/login", "/create", "/import"];
     if (!isLoggedIn) {
-      if (hasWallet && location !== "/login") {
+      if (hasWallet && !["/login", "/create", "/import"].includes(location)) {
         setLocation("/login");
-      } else if (!hasWallet && !["/", "/create", "/import"].includes(location)) {
+      } else if (!hasWallet && !publicRoutes.includes(location)) {
         setLocation("/");
       }
     } else {
       // If logged in and on public routes, go to dashboard
-      if (["/", "/login", "/create", "/import"].includes(location)) {
+      if (publicRoutes.includes(location)) {
         setLocation("/dashboard");
       }
     }
