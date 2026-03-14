@@ -17,7 +17,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { href: "/send", label: "Send", icon: Send },
     { href: "/receive", label: "Receive", icon: ArrowDownToLine },
     { href: "/history", label: "History", icon: History },
-    { href: "/pay", label: "Pay", icon: QrCode },
+    { href: "/pay", label: "Buy", icon: QrCode },
     { href: "/backup", label: "Backup", icon: ShieldAlert },
   ];
 

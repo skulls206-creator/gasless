@@ -21,7 +21,7 @@ export function Pay() {
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-140px)]">
       <div>
-        <h2 className="text-2xl font-display font-bold">Fund Wallet via Peer.xyz</h2>
+        <h2 className="text-2xl font-display font-bold">Buy USDT</h2>
         <p className="text-muted-foreground text-sm mt-1">Buy USDT directly into your TRON wallet.</p>
       </div>
 
