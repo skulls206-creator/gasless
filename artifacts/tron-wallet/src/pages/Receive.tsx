@@ -1,5 +1,5 @@
 import { useWallet } from "@/context/WalletContext";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Copy, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -23,14 +23,20 @@ export function Receive() {
       </div>
 
       <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-white/10 dark:border-white/5">
-        <QRCodeSVG 
-          value={address || ""} 
-          size={220} 
-          level="H"
-          includeMargin={true}
-          fgColor="#000000"
-          bgColor="#ffffff"
-        />
+        {address ? (
+          <QRCodeCanvas
+            value={address}
+            size={220}
+            level="H"
+            marginSize={2}
+            fgColor="#000000"
+            bgColor="#ffffff"
+          />
+        ) : (
+          <div className="w-[220px] h-[220px] flex items-center justify-center bg-gray-100 rounded-xl">
+            <span className="text-gray-400 text-sm">Loading…</span>
+          </div>
+        )}
       </div>
 
       <div className="w-full max-w-sm bg-card border border-border p-5 rounded-2xl shadow-lg mt-4 text-center">
