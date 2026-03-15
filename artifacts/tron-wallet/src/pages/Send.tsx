@@ -1,11 +1,19 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
-import { useUSDTBalance, useTronResources, useSendUSDT } from "@/hooks/use-tron";
+import { useUSDTBalance, useTronResources, useSendUSDT, useAppConfig } from "@/hooks/use-tron";
 import { validateAddress } from "@/lib/tron";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Info, ArrowUpRight, CheckCircle2, AlertTriangle, Zap, ExternalLink } from "lucide-react";
+import {
+  Info,
+  ArrowUpRight,
+  CheckCircle2,
+  AlertTriangle,
+  Zap,
+  ExternalLink,
+  Receipt,
+} from "lucide-react";
 import { GaslessModal } from "@/components/ui/GaslessModal";
 import { useQuery } from "@tanstack/react-query";
 
@@ -29,7 +37,12 @@ export function Send() {
   const { data: balance } = useUSDTBalance(address);
   const { data: resources } = useTronResources(address);
   const { data: sponsor } = useSponsorStatus();
+  const { data: config } = useAppConfig();
   const sendMutation = useSendUSDT();
+
+  const feeAmount = config?.feeAmount ?? 1;
+  const feeRecipient = config?.feeRecipient ?? null;
+  const feesEnabled = config?.feesEnabled ?? false;
 
   const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
@@ -55,15 +68,30 @@ export function Send() {
   }, [toAddress]);
 
   const handleMax = () => {
-    if (balance) setAmount(balance.toString());
+    if (!balance) return;
+    const maxSend = feesEnabled ? Math.max(0, balance - feeAmount) : balance;
+    setAmount(maxSend > 0 ? maxSend.toString() : "0");
   };
 
   const handleSend = () => {
     if (!privateKey || !address) return;
 
     const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0 || numAmount > (balance || 0)) {
+    const totalRequired = feesEnabled ? numAmount + feeAmount : numAmount;
+
+    if (isNaN(numAmount) || numAmount <= 0) {
       toast({ variant: "destructive", title: "Invalid amount" });
+      return;
+    }
+
+    if (totalRequired > (balance || 0)) {
+      toast({
+        variant: "destructive",
+        title: "Insufficient balance",
+        description: feesEnabled
+          ? `You need ${numAmount} + ${feeAmount} USDT service fee = ${totalRequired} USDT total.`
+          : "Not enough USDT.",
+      });
       return;
     }
 
@@ -73,7 +101,14 @@ export function Send() {
     }
 
     sendMutation.mutate(
-      { privateKey, fromAddress: address, toAddress, amount: numAmount },
+      {
+        privateKey,
+        fromAddress: address,
+        toAddress,
+        amount: numAmount,
+        feeRecipient: feesEnabled ? feeRecipient : null,
+        feeAmount: feesEnabled ? feeAmount : 0,
+      },
       {
         onSuccess: (result) => {
           setTxHash(result.txid);
@@ -103,7 +138,7 @@ export function Send() {
         {wasSponsored && (
           <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary text-sm font-medium px-4 py-2 rounded-full">
             <Zap className="w-4 h-4" />
-            Fee sponsored by gasless.one — no TRX charged
+            Network fee sponsored by gasless.one — no TRX needed
           </div>
         )}
 
@@ -138,11 +173,13 @@ export function Send() {
     );
   }
 
+  const numAmount = parseFloat(amount) || 0;
+  const totalRequired = feesEnabled ? numAmount + feeAmount : numAmount;
   const userHasEnergy = resources?.isSufficientForTRC20;
   const sponsorActive = sponsor?.configured && (sponsor?.availableEnergy ?? 0) > 0;
-  const isFree = userHasEnergy || sponsorActive;
-  const isFormValid =
-    isValidAddress && amount && parseFloat(amount) > 0 && parseFloat(amount) <= (balance || 0);
+  const networkFeeIsFree = userHasEnergy || sponsorActive;
+  const hasEnoughBalance = totalRequired > 0 && totalRequired <= (balance || 0);
+  const isFormValid = isValidAddress && numAmount > 0 && hasEnoughBalance;
 
   return (
     <div className="space-y-6">
@@ -192,15 +229,31 @@ export function Send() {
           </div>
         </div>
 
+        {/* Cost breakdown */}
         <div className="mt-8 bg-secondary/50 rounded-2xl p-4 border border-white/5 space-y-3">
+
+          {/* Service fee row */}
+          {feesEnabled && (
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <Receipt className="w-4 h-4" />
+                Service fee
+              </span>
+              <span className="text-sm font-semibold text-foreground">
+                {feeAmount.toFixed(2)} USDT
+              </span>
+            </div>
+          )}
+
+          {/* Network fee row */}
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground flex items-center gap-2">
-              Network Fee
+              Network fee
               <button onClick={() => setShowEduModal(true)} className="hover:text-primary">
                 <Info className="w-4 h-4" />
               </button>
             </span>
-            {isFree ? (
+            {networkFeeIsFree ? (
               <span className="text-sm font-bold text-success flex items-center gap-1">
                 <CheckCircle2 className="w-4 h-4" /> Free
               </span>
@@ -211,26 +264,38 @@ export function Send() {
             )}
           </div>
 
-          <div className="text-xs text-muted-foreground leading-relaxed">
+          {/* Divider + total */}
+          {feesEnabled && numAmount > 0 && (
+            <>
+              <div className="border-t border-white/5 pt-2 mt-1 flex justify-between items-center">
+                <span className="text-sm font-medium text-foreground">Total deducted</span>
+                <span className="text-sm font-bold text-foreground">
+                  {totalRequired.toFixed(2)} USDT
+                </span>
+              </div>
+              {!hasEnoughBalance && numAmount > 0 && (
+                <p className="text-xs text-destructive">
+                  Insufficient balance — you need {totalRequired.toFixed(2)} USDT (including fee).
+                </p>
+              )}
+            </>
+          )}
+
+          {/* Sponsor hint */}
+          <div className="text-xs text-muted-foreground/60 leading-relaxed pt-1">
             {sponsorActive && !userHasEnergy ? (
-              <span className="flex items-center gap-1 text-primary/80">
+              <span className="flex items-center gap-1 text-primary/70">
                 <Zap className="w-3 h-3 flex-shrink-0" />
-                gasless.one will sponsor this send. No TRX needed in your wallet.
+                gasless.one sponsors the network fee — no TRX needed in your wallet.
+                {sponsor?.estimatedSendsRemaining != null &&
+                  ` (~${sponsor.estimatedSendsRemaining} sponsored sends remaining)`}
               </span>
             ) : userHasEnergy ? (
-              "You have enough Bandwidth and Energy to cover this transfer for free."
+              "You have enough Energy to cover the network fee for free."
             ) : (
-              "Your free resources are insufficient. You will need a small amount of TRX, or the sponsor wallet can cover it."
+              "Network resources are low. A small amount of TRX may be required."
             )}
           </div>
-
-          {sponsorActive && (
-            <div className="text-xs text-muted-foreground/60 flex items-center gap-1 pt-1 border-t border-white/5">
-              <Zap className="w-3 h-3" />
-              Sponsor has ~{sponsor?.estimatedSendsRemaining ?? 0} sponsored send
-              {sponsor?.estimatedSendsRemaining !== 1 ? "s" : ""} remaining
-            </div>
-          )}
         </div>
 
         <Button

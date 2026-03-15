@@ -103,9 +103,29 @@ export function useUSDTTransactions(address: string | null) {
   });
 }
 
+export interface AppConfig {
+  feeAmount: number;
+  feeRecipient: string | null;
+  feesEnabled: boolean;
+}
+
 export interface GaslessSendResult {
   txid: string;
+  feeTxid?: string;
   sponsored: boolean;
+}
+
+export function useAppConfig() {
+  return useQuery<AppConfig>({
+    queryKey: ["app-config"],
+    queryFn: async () => {
+      const res = await fetch("/api/config");
+      if (!res.ok) return { feeAmount: 1, feeRecipient: null, feesEnabled: false };
+      return res.json();
+    },
+    staleTime: Infinity,
+    retry: false,
+  });
 }
 
 export function useSendUSDT() {
@@ -117,12 +137,17 @@ export function useSendUSDT() {
       fromAddress,
       toAddress,
       amount,
+      feeRecipient,
+      feeAmount,
     }: {
       privateKey: string;
       fromAddress: string;
       toAddress: string;
       amount: number;
+      feeRecipient?: string | null;
+      feeAmount?: number;
     }): Promise<GaslessSendResult> => {
+      // Sign main transfer in browser — private key never leaves device
       const signedTx = await buildAndSignUSDTTransfer(
         privateKey,
         fromAddress,
@@ -130,10 +155,21 @@ export function useSendUSDT() {
         amount,
       );
 
+      // Sign fee transfer if a fee recipient is configured
+      let signedFeeTx: object | undefined;
+      if (feeRecipient && feeAmount && feeAmount > 0) {
+        signedFeeTx = await buildAndSignUSDTTransfer(
+          privateKey,
+          fromAddress,
+          feeRecipient,
+          feeAmount,
+        );
+      }
+
       const res = await fetch("/api/gasless-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signedTx, userAddress: fromAddress }),
+        body: JSON.stringify({ signedTx, signedFeeTx, userAddress: fromAddress }),
       });
 
       const json = await res.json();

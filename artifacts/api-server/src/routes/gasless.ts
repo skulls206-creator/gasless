@@ -7,10 +7,25 @@ import {
   broadcastSignedTx,
 } from "../lib/sponsor.js";
 
+const FEE_AMOUNT = 1; // USDT
+
+function getFeeRecipient(): string | null {
+  return process.env.FEE_RECIPIENT_ADDRESS || process.env.SPONSOR_ADDRESS || null;
+}
+
 const router: IRouter = Router();
 
+router.get("/config", (_req, res): void => {
+  const feeRecipient = getFeeRecipient();
+  res.json({
+    feeAmount: FEE_AMOUNT,
+    feeRecipient: feeRecipient ?? null,
+    feesEnabled: !!feeRecipient,
+  });
+});
+
 router.post("/gasless-send", async (req, res): Promise<void> => {
-  const { signedTx, userAddress } = req.body;
+  const { signedTx, signedFeeTx, userAddress } = req.body;
 
   if (!signedTx || typeof signedTx !== "object") {
     res.status(400).json({ error: "signedTx (object) is required" });
@@ -22,12 +37,15 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
     return;
   }
 
+  const hasFee = signedFeeTx && typeof signedFeeTx === "object";
+  const txCount = hasFee ? 2 : 1;
+
   try {
     let sponsored = false;
 
     if (isSponsorConfigured()) {
       try {
-        await delegateEnergyToUser(userAddress);
+        await delegateEnergyToUser(userAddress, txCount);
         sponsored = true;
       } catch (delegateErr: any) {
         console.warn(`[gasless] Delegation skipped: ${delegateErr.message}`);
@@ -36,7 +54,17 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
 
     const { txid } = await broadcastSignedTx(signedTx);
 
-    res.json({ txid, sponsored });
+    let feeTxid: string | undefined;
+    if (hasFee) {
+      try {
+        const feeResult = await broadcastSignedTx(signedFeeTx);
+        feeTxid = feeResult.txid;
+      } catch (feeErr: any) {
+        console.warn(`[gasless] Fee broadcast failed: ${feeErr.message}`);
+      }
+    }
+
+    res.json({ txid, feeTxid, sponsored });
   } catch (err: any) {
     console.error("[gasless-send] error:", err);
     res.status(500).json({ error: err.message || "Transaction failed" });

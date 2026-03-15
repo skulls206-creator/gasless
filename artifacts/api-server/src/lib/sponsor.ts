@@ -84,7 +84,7 @@ export async function stakeTRXForEnergy(amountTRX: number): Promise<{ txid: stri
   return { txid: (result as any).txid };
 }
 
-export async function delegateEnergyToUser(userAddress: string): Promise<void> {
+export async function delegateEnergyToUser(userAddress: string, txCount = 1): Promise<void> {
   const tronWeb = getSponsorTronWeb();
   const sponsorAddress = getSponsorAddress();
 
@@ -92,11 +92,13 @@ export async function delegateEnergyToUser(userAddress: string): Promise<void> {
     throw new Error("Sponsor wallet not configured");
   }
 
+  const energyNeeded = MIN_ENERGY_FOR_USDT * txCount;
+
   const userResources = await tronWeb.trx.getAccountResources(userAddress);
   const userEnergy =
     ((userResources as any).EnergyLimit || 0) - ((userResources as any).EnergyUsed || 0);
 
-  if (userEnergy >= MIN_ENERGY_FOR_USDT) {
+  if (userEnergy >= energyNeeded) {
     console.log(`[sponsor] User ${userAddress} has ${userEnergy} energy — skipping delegation`);
     return;
   }
@@ -105,18 +107,17 @@ export async function delegateEnergyToUser(userAddress: string): Promise<void> {
   const sponsorEnergy =
     ((sponsorResources as any).EnergyLimit || 0) - ((sponsorResources as any).EnergyUsed || 0);
 
-  if (sponsorEnergy < MIN_ENERGY_FOR_USDT) {
+  if (sponsorEnergy < energyNeeded) {
     throw new Error(
       `Sponsor has insufficient energy (${sponsorEnergy}). Please stake more TRX via POST /api/admin/stake`,
     );
   }
 
-  const delegateSun = Number(
-    process.env.SPONSOR_DELEGATE_SUN ?? "32000000",
-  );
+  const baseDelegateSun = Number(process.env.SPONSOR_DELEGATE_SUN ?? "32000000");
+  const delegateSun = baseDelegateSun * txCount;
 
   console.log(
-    `[sponsor] Delegating ${delegateSun} sun of ENERGY from ${sponsorAddress} to ${userAddress}`,
+    `[sponsor] Delegating ${delegateSun} sun of ENERGY from ${sponsorAddress} to ${userAddress} (covering ${txCount} tx)`,
   );
 
   const tx = await (tronWeb.transactionBuilder as any).delegateResource(
