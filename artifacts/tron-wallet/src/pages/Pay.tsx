@@ -3,7 +3,7 @@ import { useWallet } from "@/context/WalletContext";
 import { Copy, ExternalLink, Download, Zap, CheckCircle2, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatAddress } from "@/lib/utils";
 import { createPeerExtensionSdk } from "@zkp2p/sdk";
@@ -194,7 +194,20 @@ export function Pay() {
         className="bg-card border border-border rounded-2xl p-5 flex flex-col items-center gap-4"
       >
         <div className="bg-white p-3 rounded-xl">
-          <QRCodeSVG value={address || ""} size={110} />
+          {address ? (
+            <QRCodeCanvas
+              value={address}
+              size={110}
+              level="H"
+              marginSize={1}
+              fgColor="#000000"
+              bgColor="#ffffff"
+            />
+          ) : (
+            <div className="w-[110px] h-[110px] flex items-center justify-center bg-gray-100 rounded-lg">
+              <span className="text-gray-400 text-xs">Loading…</span>
+            </div>
+          )}
         </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider font-medium">Your TRON (TRC-20) Address</p>
