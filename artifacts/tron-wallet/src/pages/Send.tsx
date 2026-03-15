@@ -6,6 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Info,
   ArrowUpRight,
   CheckCircle2,
@@ -59,13 +65,21 @@ export function Send() {
     }
   }, []);
 
+  // Immediate format check — catches Ethereum addresses before the async call
+  const isEthAddress = toAddress.startsWith("0x") && toAddress.length >= 10;
+  const mightBeTron = toAddress.startsWith("T");
+
   useEffect(() => {
+    if (isEthAddress) {
+      setIsValidAddress(false);
+      return;
+    }
     if (toAddress.length >= 34) {
       validateAddress(toAddress).then(setIsValidAddress);
     } else {
       setIsValidAddress(null);
     }
-  }, [toAddress]);
+  }, [toAddress, isEthAddress]);
 
   const handleMax = () => {
     if (!balance) return;
@@ -195,14 +209,34 @@ export function Send() {
           <label className="text-sm font-medium text-foreground ml-1">
             Recipient Address (TRON)
           </label>
-          <Input
-            placeholder="T..."
-            value={toAddress}
-            onChange={(e) => setToAddress(e.target.value)}
-            className={`font-mono text-sm ${isValidAddress === false ? "border-destructive focus-visible:ring-destructive/20" : ""}`}
-          />
-          {isValidAddress === false && (
-            <p className="text-xs text-destructive mt-1 ml-1">Invalid TRON address format</p>
+          <div className="relative">
+            <Input
+              placeholder="T..."
+              value={toAddress}
+              onChange={(e) => setToAddress(e.target.value)}
+              className={`font-mono text-sm pr-10 ${
+                isValidAddress === false
+                  ? "border-destructive focus-visible:ring-destructive/20"
+                  : isValidAddress === true
+                  ? "border-success focus-visible:ring-success/20"
+                  : ""
+              }`}
+            />
+            {isValidAddress === true && (
+              <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-success pointer-events-none" />
+            )}
+            {isValidAddress === false && toAddress.length > 0 && (
+              <AlertTriangle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive pointer-events-none" />
+            )}
+          </div>
+          {isValidAddress === false && toAddress.length > 0 && (
+            <p className="text-xs text-destructive mt-1 ml-1">
+              {isEthAddress
+                ? "This looks like an Ethereum address. TRON addresses start with T"
+                : !mightBeTron && toAddress.length > 2
+                ? "TRON addresses always start with T"
+                : "Invalid TRON address"}
+            </p>
           )}
         </div>
 
@@ -238,6 +272,18 @@ export function Send() {
               <span className="text-sm text-muted-foreground flex items-center gap-2">
                 <Receipt className="w-4 h-4" />
                 Service fee
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="hover:text-foreground transition-colors" type="button">
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[220px] text-center text-xs leading-relaxed">
+                      This $1 goes directly toward covering network fees for other users — not profit. It keeps gasless.one free for everyone.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </span>
               <span className="text-sm font-semibold text-foreground">
                 {feeAmount.toFixed(2)} USDT
