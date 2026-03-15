@@ -1,6 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import CryptoJS from "crypto-js";
 import { getTronWeb } from "@/lib/tron";
+import { sha256Hex } from "@/lib/crypto";
+
+async function syncWalletToServer(accountNum: string, encryptedPk: string, address: string) {
+  try {
+    const accountHash = await sha256Hex(accountNum);
+    await fetch("/api/wallet/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountHash, encryptedPk, address }),
+    });
+  } catch (err) {
+    console.warn("[wallet] Cloud sync failed (non-fatal):", err);
+  }
+}
 
 interface WalletContextType {
   isLoggedIn: boolean;
@@ -79,6 +93,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAddress(newAddress);
     setIsLoggedIn(true);
     setHasWallet(true);
+
+    syncWalletToServer(accountNum, encrypted, newAddress);
     
     return { address: newAddress, privateKey: newPrivateKey };
   };
@@ -100,6 +116,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setAddress(newAddress);
       setIsLoggedIn(true);
       setHasWallet(true);
+
+      syncWalletToServer(accountNum, encrypted, newAddress);
       
       return true;
     } catch (err) {

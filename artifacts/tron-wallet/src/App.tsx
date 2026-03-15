@@ -10,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import { Welcome } from "@/pages/Welcome";
 import { CreateAccount } from "@/pages/CreateAccount";
 import { ImportWallet } from "@/pages/ImportWallet";
+import { RecoverWallet } from "@/pages/RecoverWallet";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Send } from "@/pages/Send";
@@ -33,9 +34,9 @@ function AuthGuard() {
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    const publicRoutes = ["/", "/login", "/create", "/import"];
+    const publicRoutes = ["/", "/login", "/create", "/import", "/recover"];
     if (!isLoggedIn) {
-      if (hasWallet && !["/login", "/create", "/import"].includes(location)) {
+      if (hasWallet && !["/login", "/create", "/import", "/recover"].includes(location)) {
         setLocation("/login");
       } else if (!hasWallet && !publicRoutes.includes(location)) {
         setLocation("/");
@@ -54,6 +55,7 @@ function AuthGuard() {
         <Route path="/" component={Welcome} />
         <Route path="/create" component={CreateAccount} />
         <Route path="/import" component={ImportWallet} />
+        <Route path="/recover" component={RecoverWallet} />
         <Route path="/login" component={Login} />
         <Route component={Welcome} />
       </Switch>

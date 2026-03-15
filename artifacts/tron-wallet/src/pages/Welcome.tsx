@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Wallet, KeyRound, ShieldCheck } from "lucide-react";
+import { Wallet, KeyRound, ShieldCheck, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function Welcome() {
@@ -56,11 +56,18 @@ export function Welcome() {
               Create New Wallet
             </Button>
           </Link>
+
+          <Link href="/recover" className="block w-full">
+            <Button size="lg" variant="glass" className="w-full text-lg h-16 group">
+              <RotateCcw className="mr-2 w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+              Enter Account Number
+            </Button>
+          </Link>
           
           <Link href="/import" className="block w-full">
-            <Button size="lg" variant="glass" className="w-full text-lg h-16 group">
-              <KeyRound className="mr-2 w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-              Import Existing Wallet
+            <Button size="lg" variant="ghost" className="w-full h-12 text-sm text-muted-foreground group">
+              <KeyRound className="mr-2 w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+              Recover from Private Key
             </Button>
           </Link>
         </motion.div>
