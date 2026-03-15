@@ -25,35 +25,15 @@ function encodeAddressParam(tronWeb: InstanceType<typeof TronWeb>, address: stri
 }
 
 /**
- * Query USDT balance via triggerConstantContract (works even for accounts
- * that have never held TRX, which the /v1/accounts REST endpoint misses).
+ * Query USDT balance via our backend proxy.
+ * Avoids TronGrid per-IP rate limits that cause silent 0-balance on mobile.
  */
 export async function getUSDTBalance(address: string): Promise<number> {
   try {
-    const tronWeb = getTronWeb();
-    const parameter = encodeAddressParam(tronWeb, address);
-
-    const body = {
-      owner_address: address,
-      contract_address: USDT_CONTRACT_ADDRESS,
-      function_selector: "balanceOf(address)",
-      parameter,
-      visible: true,
-    };
-
-    const res = await fetch(`${TRONGRID_API_URL}/wallet/triggerconstantcontract`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
+    const res = await fetch(`/api/tron/balance/${address}`);
+    if (!res.ok) return 0;
     const json = await res.json();
-
-    const hex: string = json?.constant_result?.[0];
-    if (!hex) return 0;
-
-    const balanceSun = parseInt(hex, 16);
-    return isNaN(balanceSun) ? 0 : balanceSun / 1_000_000;
+    return typeof json.balance === "number" ? json.balance : 0;
   } catch (err) {
     console.error("getUSDTBalance failed:", err);
     return 0;
