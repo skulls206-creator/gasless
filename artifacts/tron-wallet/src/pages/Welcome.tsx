@@ -36,7 +36,7 @@ export function Welcome() {
           transition={{ delay: 0.2 }}
           className="text-center mb-12"
         >
-          <h1 className="text-5xl font-display font-bold mb-4 pb-1 text-gradient">
+          <h1 className="text-5xl font-display font-bold mb-4 text-white">
             gasless.one
           </h1>
           <p className="text-muted-foreground text-lg">
