@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getTronWeb, getUSDTBalance, USDT_CONTRACT_ADDRESS, TRONGRID_API_URL } from "@/lib/tron";
+import { getUSDTBalance, buildAndSignUSDTTransfer, USDT_CONTRACT_ADDRESS, TRONGRID_API_URL } from "@/lib/tron";
 
 export interface TronResources {
   freeNetLimit: number;
@@ -103,39 +103,51 @@ export function useUSDTTransactions(address: string | null) {
   });
 }
 
+export interface GaslessSendResult {
+  txid: string;
+  sponsored: boolean;
+}
+
 export function useSendUSDT() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({
       privateKey,
+      fromAddress,
       toAddress,
       amount,
     }: {
       privateKey: string;
+      fromAddress: string;
       toAddress: string;
       amount: number;
-    }) => {
-      const tronWeb = getTronWeb(privateKey);
-      
-      // Amount in sun (6 decimals for USDT)
-      const amountInSun = tronWeb.toBigNumber(amount).multipliedBy(1_000_000).toString();
-      
-      const contract = await tronWeb.contract().at(USDT_CONTRACT_ADDRESS);
-      const transaction = await contract.transfer(toAddress, amountInSun).send();
-      
-      if (!transaction) {
-        throw new Error("Transaction failed or rejected.");
+    }): Promise<GaslessSendResult> => {
+      const signedTx = await buildAndSignUSDTTransfer(
+        privateKey,
+        fromAddress,
+        toAddress,
+        amount,
+      );
+
+      const res = await fetch("/api/gasless-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signedTx, userAddress: fromAddress }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json.error || "Transaction failed");
       }
-      
-      return transaction; // Usually returns the tx hash
+
+      return json as GaslessSendResult;
     },
-    onSuccess: (_, variables) => {
-      const address = getTronWeb(variables.privateKey).defaultAddress.base58;
-      // Invalidate queries to refresh balance and history
-      queryClient.invalidateQueries({ queryKey: ["usdt-balance", address] });
-      queryClient.invalidateQueries({ queryKey: ["tron-resources", address] });
-      queryClient.invalidateQueries({ queryKey: ["usdt-transactions", address] });
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["usdt-balance", variables.fromAddress] });
+      queryClient.invalidateQueries({ queryKey: ["tron-resources", variables.fromAddress] });
+      queryClient.invalidateQueries({ queryKey: ["usdt-transactions", variables.fromAddress] });
     },
   });
 }

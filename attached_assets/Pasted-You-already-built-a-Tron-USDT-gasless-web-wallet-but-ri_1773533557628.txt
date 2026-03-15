@@ -1,0 +1,67 @@
+You already built a Tron USDT gasless web wallet, but right now users still need TRX for fees. I want to add a sponsor wallet system so I pay the Tron fees and users can send USDT with 0 TRX in their wallet.
+
+What’s already done (assume this is working):
+
+Frontend can create/import a Tron wallet (address + private key).
+
+It shows USDT (TRC‑20) balances.
+
+It builds and broadcasts normal USDT transfers from the user’s address.
+
+What I need you to add now:
+
+Sponsor (app) wallet support
+
+Add config/env for one backend sponsor address + private key (this is my app wallet).
+
+Assume I will manually send TRX to this sponsor address using my own wallet or an exchange.
+
+Stake TRX for resources
+
+Add a script or endpoint so I can call something like POST /admin/stake that:
+
+Stakes / freezes some of the sponsor’s TRX for Energy (and some Bandwidth) so we get daily resources for TRC‑20 transfers.
+
+Keep all staking logic backend‑only; never expose the sponsor private key to the frontend.
+
+Delegation for gasless sends (preferred pattern)
+
+Before broadcasting a USDT transfer from a user address, the backend should:
+
+Check if the user has enough delegated Energy/Bandwidth from the sponsor.
+
+If not, call Tron’s resource delegation API from the sponsor to that user address (for example via TronWeb delegateResource or the equivalent), delegating enough ENERGY for at least 1–3 USDT sends.
+
+Then broadcast the user’s USDT transaction so that it consumes the sponsor’s delegated resources instead of requiring TRX in the user wallet.
+
+Result: user can send USDT with 0 TRX; the fee is paid by the sponsor account’s staked resources.
+
+New send endpoint
+
+Replace or wrap the existing USDT send logic with a backend endpoint like POST /gasless-send that:
+
+Receives: user address, recipient, amount, and the user’s signature / private‑key‑based auth (the same way you already do).
+
+Runs the delegation step if needed.
+
+Broadcasts the TX and returns success/failure + TXID.
+
+Simple owner status
+
+Add a minimal /admin/status endpoint (can be JSON) that shows:
+
+Sponsor address TRX balance.
+
+How much TRX is currently staked.
+
+Rough remaining Energy/Bandwidth or an estimate of how many USDT sends per day I can still sponsor.
+
+Important constraints:
+
+Do NOT require end users to buy TRX. All TRX handling must be via the sponsor wallet on the backend.
+
+Do NOT ever expose the sponsor wallet’s private key to the frontend.
+
+Keep changes focused: only add what’s needed for sponsor staking, delegation, and a gasless send flow; reuse existing wallet/balance UI.
+
+Please update the existing project (backend and any necessary frontend calls) to implement this sponsor/ delegation system so the app truly works as a gasless Tron USDT wallet.

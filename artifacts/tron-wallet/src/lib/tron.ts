@@ -75,3 +75,32 @@ export function getAddressFromPrivateKey(privateKey: string): string | null {
     return null;
   }
 }
+
+/**
+ * Build and sign a USDT TRC-20 transfer transaction.
+ * The private key signs locally — it is never sent to the server.
+ * Returns the signed tx object to be submitted to /api/gasless-send.
+ */
+export async function buildAndSignUSDTTransfer(
+  privateKey: string,
+  fromAddress: string,
+  toAddress: string,
+  amount: number,
+): Promise<object> {
+  const tronWeb = getTronWeb(privateKey);
+  const amountInSun = Math.floor(amount * 1_000_000).toString();
+
+  const { transaction } = await (tronWeb.transactionBuilder as any).triggerSmartContract(
+    USDT_CONTRACT_ADDRESS,
+    "transfer(address,uint256)",
+    { feeLimit: 150_000_000 },
+    [
+      { type: "address", value: toAddress },
+      { type: "uint256", value: amountInSun },
+    ],
+    tronWeb.address.toHex(fromAddress),
+  );
+
+  const signedTx = await tronWeb.trx.sign(transaction, privateKey);
+  return signedTx;
+}
