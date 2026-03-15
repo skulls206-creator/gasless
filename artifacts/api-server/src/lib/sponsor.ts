@@ -5,9 +5,14 @@ const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
 const MIN_ENERGY_FOR_USDT = 65_000;
 
+function normalizePk(pk: string): string {
+  return pk.startsWith("0x") || pk.startsWith("0X") ? pk.slice(2) : pk;
+}
+
 function getSponsorTronWeb(): InstanceType<typeof TronWeb> | null {
-  const pk = process.env.SPONSOR_PRIVATE_KEY;
-  if (!pk) return null;
+  const rawPk = process.env.SPONSOR_PRIVATE_KEY;
+  if (!rawPk) return null;
+  const pk = normalizePk(rawPk.trim());
   return new TronWeb({ fullHost: TRONGRID, privateKey: pk });
 }
 
@@ -68,7 +73,8 @@ export async function stakeTRXForEnergy(amountTRX: number): Promise<{ txid: stri
     "ENERGY",
   );
 
-  const signedTx = await tronWeb.trx.sign(tx, process.env.SPONSOR_PRIVATE_KEY!);
+  const pk = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
+  const signedTx = await tronWeb.trx.sign(tx, pk);
   const result = await tronWeb.trx.sendRawTransaction(signedTx);
 
   if (!(result as any).result) {
@@ -121,7 +127,8 @@ export async function delegateEnergyToUser(userAddress: string): Promise<void> {
     false,
   );
 
-  const signedTx = await tronWeb.trx.sign(tx, process.env.SPONSOR_PRIVATE_KEY!);
+  const pk = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
+  const signedTx = await tronWeb.trx.sign(tx, pk);
   const result = await tronWeb.trx.sendRawTransaction(signedTx);
 
   if (!(result as any).result) {
