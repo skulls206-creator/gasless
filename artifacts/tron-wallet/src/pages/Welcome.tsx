@@ -25,8 +25,8 @@ export function Welcome() {
         >
           <img 
             src={`${import.meta.env.BASE_URL}images/logo.png`} 
-            alt="TRON Wallet" 
-            className="w-24 h-24 drop-shadow-2xl" 
+            alt="gasless.one" 
+            className="w-24 h-24 rounded-[22%] drop-shadow-2xl" 
           />
         </motion.div>
 
