@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useWallet } from "@/context/WalletContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,18 @@ export function Login() {
 
   return (
     <div className="min-h-screen flex flex-col p-6 bg-background">
+      {/* Clickable logo header */}
+      <div className="relative z-10 flex items-center gap-3 mb-4">
+        <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+          <img
+            src={`${import.meta.env.BASE_URL}images/logo.png`}
+            alt="gasless.one"
+            className="w-8 h-8 rounded-[22%] drop-shadow-md"
+          />
+          <span className="font-display font-bold text-xl tracking-tight text-white">gasless.one</span>
+        </Link>
+      </div>
+
       {/* Background Visuals */}
       <div className="absolute inset-0 z-0 pointer-events-none opacity-40">
         <img 
