@@ -42,6 +42,10 @@ export function Welcome() {
           <p className="text-muted-foreground text-lg">
             Secure, anonymous, and browser-based. <br />No emails. No passwords. No servers.
           </p>
+          <div className="mt-4 inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 text-sm text-muted-foreground">
+            <span className="w-2 h-2 rounded-full bg-[#00d4f5] shrink-0" />
+            USDT · TRC-20 · TRON Network only
+          </div>
         </motion.div>
 
         <motion.div 
