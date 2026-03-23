@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "F4aCN03i3g7SxWq0bybD9"
+uri = "file://artifacts/tron-wallet/public/favicon.svg"
+type = "image"
+title = "gasless.one favicon (SVG)"
