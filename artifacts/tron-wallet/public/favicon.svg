@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Solid dark fill — no transparent corners ever -->
+  <!-- Pitch-black bleed fills every pixel — no transparency anywhere -->
   <rect width="100" height="100" fill="#090f1a"/>
-  <!-- Subtle radial gradient like the logo background -->
-  <radialGradient id="bg" cx="35%" cy="35%" r="75%" gradientUnits="objectBoundingBox">
-    <stop offset="0%" stop-color="#1a2f4a"/>
-    <stop offset="100%" stop-color="#090f1a"/>
+  <!-- Rounded-square card matches the logo's visible shape -->
+  <rect x="0" y="0" width="100" height="100" rx="22" ry="22" fill="#0e1929"/>
+  <!-- Subtle top-left highlight -->
+  <radialGradient id="hl" cx="30%" cy="28%" r="60%" gradientUnits="objectBoundingBox">
+    <stop offset="0%" stop-color="#1a3050" stop-opacity="1"/>
+    <stop offset="100%" stop-color="#0e1929" stop-opacity="1"/>
   </radialGradient>
-  <rect width="100" height="100" fill="url(#bg)"/>
+  <rect x="0" y="0" width="100" height="100" rx="22" ry="22" fill="url(#hl)"/>
   <!-- Cyan ring -->
   <circle cx="50" cy="50" r="30" stroke="#00d4f5" stroke-width="6.5" fill="none"/>
   <!-- Diagonal arrow shaft -->
