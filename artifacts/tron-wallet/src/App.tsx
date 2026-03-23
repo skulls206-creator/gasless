@@ -19,6 +19,7 @@ import { History } from "@/pages/History";
 import { Pay } from "@/pages/Pay";
 import { Backup } from "@/pages/Backup";
 import { useEffect } from "react";
+import { KhurkOSBanner } from "@/components/ui/KhurkOSBanner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,6 +83,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <WalletProvider>
         <TooltipProvider>
+          <KhurkOSBanner />
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthGuard />
           </WouterRouter>
