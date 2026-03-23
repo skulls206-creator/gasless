@@ -3,6 +3,8 @@ import { useWallet } from "@/context/WalletContext";
 import { Wallet, Send, ArrowDownToLine, History, QrCode, ShieldAlert, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { NotificationBell } from "@/components/ui/NotificationBell";
+import { InstallPWA } from "@/components/ui/InstallPWA";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -39,13 +41,16 @@ export function AppLayout({ children }: AppLayoutProps) {
           <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Logo" className="w-8 h-8 rounded-[22%] drop-shadow-md" />
           <h1 className="font-display font-bold text-xl tracking-tight text-white">gasless.one</h1>
         </div>
-        <button 
-          onClick={logout}
-          className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 text-sm font-medium"
-        >
-          <LogOut className="w-4 h-4" />
-          <span className="hidden sm:inline">Lock Wallet</span>
-        </button>
+        <div className="flex items-center gap-4">
+          <NotificationBell />
+          <button 
+            onClick={logout}
+            className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 text-sm font-medium"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Lock Wallet</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -62,6 +67,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <InstallPWA />
 
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6 bg-gradient-to-t from-background via-background/95 to-transparent pointer-events-none">

@@ -3,6 +3,7 @@ import healthRouter from "./health.js";
 import gaslessRouter from "./gasless.js";
 import walletRouter from "./wallet.js";
 import tronRouter from "./tron.js";
+import pushRouter, { startTransactionPoller } from "./push.js";
 
 const router: IRouter = Router();
 
@@ -10,5 +11,8 @@ router.use(healthRouter);
 router.use(gaslessRouter);
 router.use(walletRouter);
 router.use(tronRouter);
+router.use(pushRouter);
+
+startTransactionPoller();
 
 export default router;

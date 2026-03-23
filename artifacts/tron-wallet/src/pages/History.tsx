@@ -1,8 +1,16 @@
 import { useWallet } from "@/context/WalletContext";
 import { useUSDTTransactions } from "@/hooks/use-tron";
-import { ArrowUpRight, ArrowDownLeft, ExternalLink, RefreshCw, AlertCircle } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, ExternalLink, RefreshCw, AlertCircle, Copy } from "lucide-react";
 import { formatAddress } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { toast } from "sonner";
 
 export function History() {
   const { address } = useWallet();
@@ -16,6 +24,10 @@ export function History() {
   } = useUSDTTransactions(address);
 
   const isEmpty = !transactions || transactions.length === 0;
+
+  const copy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(() => toast.success(`${label} copied`));
+  };
 
   return (
     <div className="space-y-5">
@@ -72,48 +84,80 @@ export function History() {
               hour: "2-digit",
               minute: "2-digit",
             });
+            const tronscanUrl = `https://tronscan.org/#/transaction/${tx.transaction_id}`;
 
             return (
-              <a
-                key={tx.transaction_id}
-                href={`https://tronscan.org/#/transaction/${tx.transaction_id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center justify-between bg-card border border-border hover:border-primary/30 hover:bg-card/80 p-4 rounded-2xl transition-all duration-200 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isReceive ? "bg-success/10" : "bg-secondary"}`}>
-                    {isReceive ? (
-                      <ArrowDownLeft className="w-5 h-5 text-success" />
-                    ) : (
-                      <ArrowUpRight className="w-5 h-5 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground text-sm">
-                      {isReceive ? "Received USDT" : "Sent USDT"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {date}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {isReceive
-                        ? `From ${formatAddress(tx.from)}`
-                        : `To ${formatAddress(tx.to)}`}
-                    </p>
-                  </div>
-                </div>
+              <ContextMenu key={tx.transaction_id}>
+                <ContextMenuTrigger asChild>
+                  <a
+                    href={tronscanUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between bg-card border border-border hover:border-primary/30 hover:bg-card/80 p-4 rounded-2xl transition-all duration-200 group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isReceive ? "bg-success/10" : "bg-secondary"}`}>
+                        {isReceive ? (
+                          <ArrowDownLeft className="w-5 h-5 text-success" />
+                        ) : (
+                          <ArrowUpRight className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground text-sm">
+                          {isReceive ? "Received USDT" : "Sent USDT"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{date}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {isReceive
+                            ? `From ${formatAddress(tx.from)}`
+                            : `To ${formatAddress(tx.to)}`}
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="text-right flex items-center gap-3">
-                  <div>
-                    <p className={`font-bold font-mono text-sm ${isReceive ? "text-success" : "text-foreground"}`}>
-                      {isReceive ? "+" : "-"}{amount.toFixed(2)}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">USDT</p>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                </div>
-              </a>
+                    <div className="text-right flex items-center gap-3">
+                      <div>
+                        <p className={`font-bold font-mono text-sm ${isReceive ? "text-success" : "text-foreground"}`}>
+                          {isReceive ? "+" : "-"}{amount.toFixed(2)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">USDT</p>
+                      </div>
+                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    </div>
+                  </a>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="w-52">
+                  <ContextMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      copy(tx.transaction_id, "Transaction hash");
+                    }}
+                  >
+                    <Copy className="w-3.5 h-3.5 mr-2" />
+                    Copy TX hash
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      copy(isReceive ? tx.from : tx.to, "Address");
+                    }}
+                  >
+                    <Copy className="w-3.5 h-3.5 mr-2" />
+                    Copy {isReceive ? "sender" : "recipient"} address
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(tronscanUrl, "_blank", "noreferrer");
+                    }}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 mr-2" />
+                    View on Tronscan
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
         </div>

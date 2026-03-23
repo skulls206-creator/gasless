@@ -58,14 +58,40 @@ A fully browser-side gasless USDT (TRC-20) wallet on the TRON network.
 - `src/pages/` — All page components (Welcome, CreateAccount, Login, Dashboard, Send, Receive, History, Backup, Pay, ImportWallet)
 - `src/components/ui/GaslessModal.tsx` — Bandwidth/Energy education modal
 
+### PWA & Push Notifications
+- **Service worker** (`src/sw.ts`): Workbox precache + push event handler + notificationclick
+- **VitePWA** (`vite.config.ts`): `injectManifest` strategy pointing at `src/sw.ts`
+- **Notification bell** in AppLayout header — subscribe/unsubscribe to push (Radix Tooltip shows state)
+- **Install banner** (`InstallPWA.tsx`): slides up on `beforeinstallprompt`, Spring-animated with Framer Motion
+- **Backend poller** (`artifacts/api-server/src/routes/push.ts`): every 30s per subscribed address, checks TronGrid for new incoming TRC-20 txs, sends Web Push notification, dedupes by `last_seen_tx`
+- VAPID keys: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL` env vars
+
+### Context Menus (Radix ContextMenu)
+- **Receive page**: right-click address card → Copy address / View on Tronscan
+- **History page**: right-click transaction row → Copy TX hash / Copy address / View on Tronscan
+
 ### Dependencies
 - `tronweb` — TRON blockchain interaction
 - `crypto-js` — AES-256 encryption of private key
 - `qrcode.react` — QR code generation
 - `framer-motion` — Page animations
+- `vite-plugin-pwa` — PWA manifest + service worker injection
+- `web-push` (api-server) — VAPID-based Web Push delivery
 
-### API Calls (all client-side, no backend)
-- TronGrid REST API: `https://api.trongrid.io`
+### Backend API (`artifacts/api-server`)
+- `GET /api/tron/balance/:address` — proxy to TronGrid (prevents mobile rate-limiting)
+- `GET /api/push/vapid-key` — returns VAPID public key for client subscription
+- `POST /api/push/subscribe` — save push subscription (address + PushSubscription JSON)
+- `POST /api/push/unsubscribe` — remove subscription by endpoint
+- `POST /api/wallet/sync` — cloud backup (SHA-256 hash of account number + encrypted PK)
+- `GET /api/wallet/recover/:hash` — retrieve encrypted PK for cloud recovery
+
+### Database Tables
+- `wallet_backups` — cloud encrypted PK backup keyed by account hash
+- `push_subscriptions` — Web Push subscriptions with `last_seen_tx` for dedup
+
+### TronGrid API (proxied via backend)
+- `https://api.trongrid.io`
   - GET `/v1/accounts/{address}` — account resources (bandwidth, energy)
   - GET `/v1/accounts/{address}/transactions/trc20` — TRC-20 tx history
 - USDT contract: `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`
