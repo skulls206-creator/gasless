@@ -25,7 +25,7 @@ export function Welcome() {
         >
           <img 
             src={`${import.meta.env.BASE_URL}images/logo.png`} 
-            alt="gasless.one" 
+            alt="Gasless" 
             className="w-24 h-24 rounded-[22%] drop-shadow-2xl" 
           />
         </motion.div>
@@ -37,7 +37,7 @@ export function Welcome() {
           className="text-center mb-12"
         >
           <h1 className="text-5xl font-display font-bold mb-4 text-white">
-            gasless.one
+            Gasless
           </h1>
           <p className="text-muted-foreground text-lg">
             Secure, anonymous, and browser-based. <br />No emails. No passwords. No servers.

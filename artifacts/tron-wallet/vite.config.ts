@@ -32,8 +32,8 @@ export default defineConfig({
         enabled: false,
       },
       manifest: {
-        name: "gasless.one",
-        short_name: "gasless.one",
+        name: "Gasless",
+        short_name: "Gasless",
         description: "Gasless TRON USDT wallet — no emails, no passwords, no servers.",
         start_url: "/",
         display: "standalone",

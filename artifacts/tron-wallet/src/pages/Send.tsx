@@ -152,7 +152,7 @@ export function Send() {
         {wasSponsored && (
           <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary text-sm font-medium px-4 py-2 rounded-full">
             <Zap className="w-4 h-4" />
-            Network fee sponsored by gasless.one — no TRX needed
+            Network fee sponsored by Gasless — no TRX needed
           </div>
         )}
 
@@ -280,7 +280,7 @@ export function Send() {
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-[220px] text-center text-xs leading-relaxed">
-                      This $1 goes directly toward covering network fees for other users — not profit. It keeps gasless.one free for everyone.
+                      This $1 goes directly toward covering network fees for other users — not profit. It keeps Gasless free for everyone.
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -332,7 +332,7 @@ export function Send() {
             {sponsorActive && !userHasEnergy ? (
               <span className="flex items-center gap-1 text-primary/70">
                 <Zap className="w-3 h-3 flex-shrink-0" />
-                gasless.one sponsors the network fee — no TRX needed in your wallet.
+                Gasless sponsors the network fee — no TRX needed in your wallet.
                 {sponsor?.estimatedSendsRemaining != null &&
                   ` (~${sponsor.estimatedSendsRemaining} sponsored sends remaining)`}
               </span>

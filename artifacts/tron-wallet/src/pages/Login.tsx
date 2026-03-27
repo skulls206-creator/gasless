@@ -48,10 +48,10 @@ export function Login() {
         <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <img
             src={`${import.meta.env.BASE_URL}images/logo.png`}
-            alt="gasless.one"
+            alt="Gasless"
             className="w-8 h-8 rounded-[22%] drop-shadow-md"
           />
-          <span className="font-display font-bold text-xl tracking-tight text-white">gasless.one</span>
+          <span className="font-display font-bold text-xl tracking-tight text-white">Gasless</span>
         </Link>
       </div>
 

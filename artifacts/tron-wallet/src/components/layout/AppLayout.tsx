@@ -39,7 +39,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <header className="relative z-10 sticky top-0 bg-background/60 backdrop-blur-md border-b border-white/5 py-4 px-6 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Logo" className="w-8 h-8 rounded-[22%] drop-shadow-md" />
-          <h1 className="font-display font-bold text-xl tracking-tight text-white">gasless.one</h1>
+          <h1 className="font-display font-bold text-xl tracking-tight text-white">Gasless</h1>
         </div>
         <div className="flex items-center gap-4">
           <NotificationBell />
