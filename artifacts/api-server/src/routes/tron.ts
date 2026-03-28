@@ -4,11 +4,60 @@ import { TronWeb } from "tronweb";
 const TRONGRID_API_URL = "https://api.trongrid.io";
 const USDT_CONTRACT_ADDRESS = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
-function getBackendTronWeb() {
+export function getTronGridHeaders(): Record<string, string> {
   const apiKey = process.env.TRONGRID_API_KEY;
-  const headers: Record<string, string> = {};
-  if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
-  return new TronWeb({ fullHost: TRONGRID_API_URL, headers });
+  return apiKey ? { "TRON-PRO-API-KEY": apiKey } : {};
+}
+
+function getBackendTronWeb() {
+  return new TronWeb({ fullHost: TRONGRID_API_URL, headers: getTronGridHeaders() });
+}
+
+/**
+ * Retry a TronGrid fetch up to `maxTries` times on 429 / 5xx,
+ * with exponential back-off (1 s → 2 s → 4 s).
+ */
+async function tronFetchWithRetry(
+  url: string,
+  init: RequestInit = {},
+  maxTries = 4,
+): Promise<Response> {
+  const headers = { ...getTronGridHeaders(), ...(init.headers as Record<string, string> ?? {}) };
+  let delay = 1000;
+  let lastErr: unknown;
+
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    const res = await fetch(url, { ...init, headers });
+    if (res.status !== 429 && res.status < 500) return res;
+    lastErr = new Error(`TronGrid ${res.status}`);
+    if (attempt < maxTries) {
+      await new Promise((r) => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Wrap a TronWeb call so that if TronGrid 429s we retry with back-off.
+ */
+async function withTronRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> {
+  let delay = 1000;
+  let lastErr: unknown;
+
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const msg: string = err?.message ?? "";
+      const is429 = msg.includes("429") || msg.includes("Too Many");
+      if (!is429 || attempt >= maxTries) throw err;
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+  throw lastErr;
 }
 
 const router: IRouter = Router();
@@ -44,7 +93,7 @@ router.get("/tron/balance/:address", async (req, res) => {
 
     const parameter = encodeAddressToAbi(hexAddress);
 
-    const response = await fetch(`${TRONGRID_API_URL}/wallet/triggerconstantcontract`, {
+    const response = await tronFetchWithRetry(`${TRONGRID_API_URL}/wallet/triggerconstantcontract`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -91,15 +140,17 @@ router.post("/tron/build-transfer", async (req, res) => {
     const tronWeb = getBackendTronWeb();
     const amountInSun = Math.floor(amount * 1_000_000).toString();
 
-    const result: any = await (tronWeb.transactionBuilder as any).triggerSmartContract(
-      USDT_CONTRACT_ADDRESS,
-      "transfer(address,uint256)",
-      { feeLimit: 150_000_000 },
-      [
-        { type: "address", value: toAddress },
-        { type: "uint256", value: amountInSun },
-      ],
-      tronWeb.address.toHex(fromAddress),
+    const result: any = await withTronRetry(() =>
+      (tronWeb.transactionBuilder as any).triggerSmartContract(
+        USDT_CONTRACT_ADDRESS,
+        "transfer(address,uint256)",
+        { feeLimit: 150_000_000 },
+        [
+          { type: "address", value: toAddress },
+          { type: "uint256", value: amountInSun },
+        ],
+        tronWeb.address.toHex(fromAddress),
+      ),
     );
 
     if (!result?.transaction) {

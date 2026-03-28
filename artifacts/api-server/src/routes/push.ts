@@ -3,6 +3,7 @@ import webpush from "web-push";
 import { db } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { getTronGridHeaders } from "./tron.js";
 
 const router: IRouter = Router();
 
@@ -11,6 +12,18 @@ const VAPID_PRIVATE_KEY = process.env["VAPID_PRIVATE_KEY"] ?? "";
 const VAPID_EMAIL = process.env["VAPID_EMAIL"] ?? "mailto:admin@gasless.one";
 const TRONGRID_API_URL = "https://api.trongrid.io";
 const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
+/** Fetch with retry on 429/5xx and exponential back-off */
+async function tronFetchWithRetry(url: string, maxTries = 4): Promise<Response> {
+  let delay = 1000;
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    const res = await fetch(url, { headers: getTronGridHeaders() });
+    if (res.status !== 429 && res.status < 500) return res;
+    if (attempt < maxTries) await new Promise((r) => setTimeout(r, delay));
+    delay *= 2;
+  }
+  throw new Error("TronGrid rate limit exceeded after retries");
+}
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
@@ -102,8 +115,11 @@ async function pollTransactions() {
   }
 
   for (const sub of subs) {
+    // Stagger calls 500 ms apart so we don't burst the free-tier quota
+    await new Promise((r) => setTimeout(r, 500));
+
     try {
-      const res = await fetch(
+      const res = await tronFetchWithRetry(
         `${TRONGRID_API_URL}/v1/accounts/${sub.address}/transactions/trc20?contract_address=${USDT_CONTRACT}&limit=5&only_confirmed=true`,
       );
       if (!res.ok) continue;
