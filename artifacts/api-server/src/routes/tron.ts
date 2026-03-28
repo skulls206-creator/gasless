@@ -1,7 +1,15 @@
 import { Router, type IRouter } from "express";
+import { TronWeb } from "tronweb";
 
 const TRONGRID_API_URL = "https://api.trongrid.io";
 const USDT_CONTRACT_ADDRESS = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
+function getBackendTronWeb() {
+  const apiKey = process.env.TRONGRID_API_KEY;
+  const headers: Record<string, string> = {};
+  if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
+  return new TronWeb({ fullHost: TRONGRID_API_URL, headers });
+}
 
 const router: IRouter = Router();
 
@@ -62,6 +70,46 @@ router.get("/tron/balance/:address", async (req, res) => {
   } catch (err) {
     console.error("Balance proxy error:", err);
     return res.json({ balance: 0 });
+  }
+});
+
+// Build an unsigned USDT transfer transaction server-side so the browser
+// never calls TronGrid directly (avoids per-IP rate limits and 401s from
+// empty/missing API keys).
+router.post("/tron/build-transfer", async (req, res) => {
+  const { fromAddress, toAddress, amount } = req.body as {
+    fromAddress: string;
+    toAddress: string;
+    amount: number;
+  };
+
+  if (!fromAddress || !toAddress || !amount || amount <= 0) {
+    return res.status(400).json({ error: "fromAddress, toAddress, and amount are required" });
+  }
+
+  try {
+    const tronWeb = getBackendTronWeb();
+    const amountInSun = Math.floor(amount * 1_000_000).toString();
+
+    const result: any = await (tronWeb.transactionBuilder as any).triggerSmartContract(
+      USDT_CONTRACT_ADDRESS,
+      "transfer(address,uint256)",
+      { feeLimit: 150_000_000 },
+      [
+        { type: "address", value: toAddress },
+        { type: "uint256", value: amountInSun },
+      ],
+      tronWeb.address.toHex(fromAddress),
+    );
+
+    if (!result?.transaction) {
+      return res.status(500).json({ error: "Failed to build transaction", detail: result });
+    }
+
+    return res.json({ transaction: result.transaction });
+  } catch (err: any) {
+    console.error("[build-transfer] error:", err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? "Failed to build transaction" });
   }
 });
 

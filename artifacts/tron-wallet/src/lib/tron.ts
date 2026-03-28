@@ -4,16 +4,10 @@ export const USDT_CONTRACT_ADDRESS = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 export const TRONGRID_API_URL = "https://api.trongrid.io";
 
 export function getTronWeb(privateKey?: string) {
-  // Use public TronGrid endpoints. For a production app at scale, an API key is recommended.
-  const config: any = {
-    fullHost: TRONGRID_API_URL,
-    headers: { "TRON-PRO-API-KEY": "" },
-  };
-  
-  if (privateKey) {
-    config.privateKey = privateKey;
-  }
-  
+  // No API key header — omitting it entirely lets TronGrid use the free tier.
+  // Passing an empty string ("") causes a 401; absence of the header does not.
+  const config: any = { fullHost: TRONGRID_API_URL };
+  if (privateKey) config.privateKey = privateKey;
   return new TronWeb(config);
 }
 
@@ -58,8 +52,13 @@ export function getAddressFromPrivateKey(privateKey: string): string | null {
 
 /**
  * Build and sign a USDT TRC-20 transfer transaction.
- * The private key signs locally — it is never sent to the server.
- * Returns the signed tx object to be submitted to /api/gasless-send.
+ *
+ * Building is done server-side (/api/tron/build-transfer) so the browser
+ * never calls TronGrid directly — prevents 401s from missing/empty API keys
+ * and avoids per-IP rate limits on mobile.
+ *
+ * Signing happens locally in the browser; the private key is never sent
+ * anywhere.
  */
 export async function buildAndSignUSDTTransfer(
   privateKey: string,
@@ -67,20 +66,22 @@ export async function buildAndSignUSDTTransfer(
   toAddress: string,
   amount: number,
 ): Promise<object> {
+  // Step 1 — ask the backend to build the raw unsigned transaction
+  const buildRes = await fetch("/api/tron/build-transfer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fromAddress, toAddress, amount }),
+  });
+
+  if (!buildRes.ok) {
+    const err = await buildRes.json().catch(() => ({}));
+    throw new Error(err?.error ?? `Build failed (${buildRes.status})`);
+  }
+
+  const { transaction } = await buildRes.json();
+
+  // Step 2 — sign locally; no network call
   const tronWeb = getTronWeb(privateKey);
-  const amountInSun = Math.floor(amount * 1_000_000).toString();
-
-  const { transaction } = await (tronWeb.transactionBuilder as any).triggerSmartContract(
-    USDT_CONTRACT_ADDRESS,
-    "transfer(address,uint256)",
-    { feeLimit: 150_000_000 },
-    [
-      { type: "address", value: toAddress },
-      { type: "uint256", value: amountInSun },
-    ],
-    tronWeb.address.toHex(fromAddress),
-  );
-
   const signedTx = await tronWeb.trx.sign(transaction, privateKey);
   return signedTx;
 }
