@@ -1,5 +1,10 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "-dmAcb7ROYp7TV40cOyKv"
+uri = "file://artifacts/tron-wallet/public/logo-crystal.png"
+type = "image"
+title = "gasless crystal lightning bolt logo"
 
 [[outputs]]
 id = "F4aCN03i3g7SxWq0bybD9"
