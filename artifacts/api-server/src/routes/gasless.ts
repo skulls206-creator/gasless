@@ -4,6 +4,7 @@ import {
   isSponsorConfigured,
   getSponsorStatus,
   stakeTRXForEnergy,
+  topUpUserTRX,
   delegateEnergyToUser,
   broadcastSignedTx,
 } from "../lib/sponsor.js";
@@ -143,11 +144,28 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
     let sponsored = false;
 
     if (isSponsorConfigured()) {
+      // Prefer energy delegation (zero-cost if we have sufficient staked energy)
+      let energyOk = false;
       try {
         await delegateEnergyToUser(userAddress, txCount);
+        energyOk = true;
         sponsored = true;
+        console.log("[gasless] Energy delegation succeeded");
       } catch (delegateErr: any) {
-        console.warn(`[gasless] Delegation skipped: ${delegateErr.message}`);
+        console.log(`[gasless] Energy delegation unavailable: ${delegateErr.message}`);
+      }
+
+      // Fall back to TRX top-up: sponsor sends enough TRX for the user to pay their own fee
+      if (!energyOk) {
+        try {
+          const topUp = await topUpUserTRX(userAddress);
+          if (topUp.topped) {
+            console.log(`[gasless] TRX top-up: ${topUp.amountTRX} TRX sent to ${userAddress} (tx: ${topUp.txid})`);
+            sponsored = true;
+          }
+        } catch (topUpErr: any) {
+          console.warn(`[gasless] TRX top-up skipped: ${topUpErr.message}`);
+        }
       }
     }
 

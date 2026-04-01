@@ -1,19 +1,77 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ShieldAlert, Key, Copy, Eye, EyeOff } from "lucide-react";
+import { ShieldAlert, Key, Copy, Eye, EyeOff, Bell, BellOff, BellRing, Loader2, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAccountNumberInput } from "@/lib/utils";
-import CryptoJS from "crypto-js";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+type AlertState = "loading" | "unsupported" | "denied" | "subscribed" | "unsubscribed";
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function Backup() {
   const { privateKey, accountNumber, address } = useWallet();
   const { toast } = useToast();
-  
+
+  // Backup unlock state
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [showKey, setShowKey] = useState(false);
+
+  // Admin alerts state
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [adminSecret, setAdminSecret] = useState("");
+  const [alertState, setAlertState] = useState<AlertState>("loading");
+  const [alertWorking, setAlertWorking] = useState(false);
+
+  // Check current admin subscription status on mount / when section is opened
+  useEffect(() => {
+    if (!showAlerts) return;
+
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setAlertState("unsupported");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setAlertState("denied");
+      return;
+    }
+
+    navigator.serviceWorker.ready.then(async (reg) => {
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) { setAlertState("unsubscribed"); return; }
+
+      // Ask the server if this endpoint is an admin subscription
+      try {
+        const res = await fetch("/api/push/admin-status", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-secret": adminSecret,
+          },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        if (res.ok) {
+          const { subscribed } = await res.json();
+          setAlertState(subscribed ? "subscribed" : "unsubscribed");
+        } else {
+          setAlertState("unsubscribed");
+        }
+      } catch {
+        setAlertState("unsubscribed");
+      }
+    });
+  }, [showAlerts, adminSecret]);
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +87,80 @@ export function Backup() {
     if (privateKey) {
       navigator.clipboard.writeText(privateKey);
       toast({ title: "Private Key Copied", description: "Keep it safe. Never share it." });
+    }
+  };
+
+  const handleSubscribeAlerts = async () => {
+    if (!adminSecret.trim()) {
+      toast({ variant: "destructive", title: "Admin secret required", description: "Enter your admin secret to subscribe." });
+      return;
+    }
+
+    setAlertWorking(true);
+    try {
+      // Ensure notification permission
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setAlertState("denied");
+        toast({ variant: "destructive", title: "Permission denied", description: "Enable notifications in your browser settings." });
+        return;
+      }
+
+      // Get VAPID key and create subscription
+      const keyRes = await fetch("/api/push/vapid-key");
+      if (!keyRes.ok) throw new Error("Could not fetch VAPID key");
+      const { publicKey } = await keyRes.json();
+
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+
+      const res = await fetch("/api/push/admin-subscribe", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": adminSecret.trim(),
+        },
+        body: JSON.stringify({ subscription: sub.toJSON() }),
+      });
+
+      if (res.status === 401) {
+        toast({ variant: "destructive", title: "Incorrect admin secret", description: "Double-check your secret and try again." });
+        return;
+      }
+      if (!res.ok) throw new Error("Server error");
+
+      setAlertState("subscribed");
+      toast({ title: "Admin alerts enabled", description: "You'll be notified when sponsor TRX runs low." });
+    } catch (err: any) {
+      console.error("Admin subscribe failed:", err);
+      toast({ variant: "destructive", title: "Subscribe failed", description: err.message ?? "Unknown error" });
+    } finally {
+      setAlertWorking(false);
+    }
+  };
+
+  const handleUnsubscribeAlerts = async () => {
+    setAlertWorking(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await fetch("/api/push/unsubscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        await sub.unsubscribe();
+      }
+      setAlertState("unsubscribed");
+      toast({ title: "Admin alerts disabled" });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Unsubscribe failed", description: err.message });
+    } finally {
+      setAlertWorking(false);
     }
   };
 
@@ -55,7 +187,7 @@ export function Backup() {
           <p className="text-sm text-muted-foreground mb-6">
             Please enter your 20-digit Account Number to reveal your raw private key.
           </p>
-          
+
           <form onSubmit={handleUnlock} className="space-y-4">
             <Input
               type="tel"
@@ -77,16 +209,16 @@ export function Backup() {
               <h3 className="font-semibold text-primary flex items-center gap-2">
                 <Key className="w-4 h-4" /> Raw Private Key
               </h3>
-              <button 
-                onClick={() => setShowKey(!showKey)} 
+              <button
+                onClick={() => setShowKey(!showKey)}
                 className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
-                {showKey ? <><EyeOff className="w-3 h-3"/> Hide</> : <><Eye className="w-3 h-3"/> Reveal</>}
+                {showKey ? <><EyeOff className="w-3 h-3" /> Hide</> : <><Eye className="w-3 h-3" /> Reveal</>}
               </button>
             </div>
-            
+
             <div className="relative">
-              <div className={`font-mono text-sm sm:text-base break-all bg-background p-4 rounded-xl border border-white/5 transition-all ${showKey ? 'text-foreground' : 'text-transparent select-none blur-sm'}`}>
+              <div className={`font-mono text-sm sm:text-base break-all bg-background p-4 rounded-xl border border-white/5 transition-all ${showKey ? "text-foreground" : "text-transparent select-none blur-sm"}`}>
                 {privateKey}
               </div>
               {!showKey && (
@@ -107,6 +239,110 @@ export function Backup() {
           </div>
         </div>
       )}
+
+      {/* ── Admin Alerts ──────────────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-3xl overflow-hidden">
+        <button
+          onClick={() => setShowAlerts((v) => !v)}
+          className="w-full flex items-center justify-between p-5 hover:bg-secondary/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+              <BellRing className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="text-left">
+              <p className="font-semibold text-sm">Admin Alerts</p>
+              <p className="text-xs text-muted-foreground">Get notified when sponsor TRX runs low</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {alertState === "subscribed" && (
+              <span className="text-[10px] text-amber-400 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-full">
+                Active
+              </span>
+            )}
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showAlerts ? "rotate-180" : ""}`} />
+          </div>
+        </button>
+
+        {showAlerts && (
+          <div className="px-5 pb-5 space-y-4 border-t border-border/60 pt-4">
+            {alertState === "unsupported" && (
+              <p className="text-sm text-muted-foreground">
+                Push notifications are not supported in this browser.
+              </p>
+            )}
+
+            {alertState === "denied" && (
+              <p className="text-sm text-red-400">
+                Notifications are blocked. Enable them in your browser settings and reload.
+              </p>
+            )}
+
+            {(alertState === "loading") && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking status…
+              </div>
+            )}
+
+            {(alertState === "unsubscribed" || alertState === "subscribed") && (
+              <>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  The server checks the sponsor wallet's TRX balance every 30 minutes.
+                  If it drops below the threshold, you'll receive a push notification on this device.
+                </p>
+
+                {alertState === "unsubscribed" && (
+                  <div className="space-y-3">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Admin Secret
+                    </label>
+                    <Input
+                      type="password"
+                      placeholder="Enter your admin secret"
+                      value={adminSecret}
+                      onChange={(e) => setAdminSecret(e.target.value)}
+                      className="font-mono"
+                    />
+                    <Button
+                      className="w-full"
+                      onClick={handleSubscribeAlerts}
+                      disabled={alertWorking || !adminSecret.trim()}
+                    >
+                      {alertWorking
+                        ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Subscribing…</>
+                        : <><Bell className="w-4 h-4 mr-2" /> Enable Low-TRX Alerts</>
+                      }
+                    </Button>
+                  </div>
+                )}
+
+                {alertState === "subscribed" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                      <BellRing className="w-5 h-5 text-amber-400 shrink-0" />
+                      <p className="text-sm text-amber-300">
+                        This device will receive an alert when the sponsor wallet drops below the TRX threshold.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      onClick={handleUnsubscribeAlerts}
+                      disabled={alertWorking}
+                    >
+                      {alertWorking
+                        ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Disabling…</>
+                        : <><BellOff className="w-4 h-4 mr-2" /> Disable Alerts</>
+                      }
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

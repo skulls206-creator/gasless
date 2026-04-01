@@ -17,14 +17,17 @@ self.addEventListener("push", (event: PushEvent) => {
     url?: string;
     amount?: string;
     from?: string;
+    type?: string;
   };
+
+  const isAdmin = data.type === "sponsor-low-trx";
 
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: "/images/logo.png",
       badge: "/images/logo.png",
-      tag: "tron-tx",
+      tag: isAdmin ? "sponsor-alert" : "tron-tx",
       renotify: true,
       data: { url: data.url ?? "/" },
     } as NotificationOptions),

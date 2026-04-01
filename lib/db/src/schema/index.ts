@@ -15,5 +15,6 @@ export const pushSubscriptionsTable = pgTable("push_subscriptions", {
   p256dh:      text("p256dh").notNull(),
   auth:        text("auth").notNull(),
   lastSeenTx:  text("last_seen_tx"),
+  isAdmin:     text("is_admin").default("false").notNull(),
   createdAt:   timestamp("created_at").defaultNow().notNull(),
 });
