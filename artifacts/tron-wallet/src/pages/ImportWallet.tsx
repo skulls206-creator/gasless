@@ -30,19 +30,19 @@ export function ImportWallet() {
     setStep(2);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     setIsImporting(true);
-    setTimeout(() => {
-      const success = importWallet(privateKey, accountNum);
-      setIsImporting(false);
-      
+    try {
+      const success = await importWallet(privateKey, accountNum);
       if (success) {
         toast({ title: "Wallet imported successfully!" });
         setLocation("/dashboard");
       } else {
         toast({ variant: "destructive", title: "Import failed" });
       }
-    }, 1000);
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   return (

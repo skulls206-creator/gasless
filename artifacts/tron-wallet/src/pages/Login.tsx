@@ -16,29 +16,29 @@ export function Login() {
   const [accountNum, setAccountNum] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (accountNum.length !== 23) { // 20 digits + 3 dashes
+    if (accountNum.length !== 23) {
       toast({ variant: "destructive", title: "Incomplete account number" });
       return;
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      const success = login(accountNum);
-      setIsLoading(false);
-      
+    try {
+      const success = await login(accountNum);
       if (success) {
         toast({ title: "Welcome back!" });
         setLocation("/dashboard");
       } else {
-        toast({ 
-          variant: "destructive", 
-          title: "Access Denied", 
-          description: "Incorrect account number or wallet data corrupted." 
+        toast({
+          variant: "destructive",
+          title: "Access Denied",
+          description: "Incorrect account number or wallet data corrupted.",
         });
       }
-    }, 600);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

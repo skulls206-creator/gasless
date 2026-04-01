@@ -28,17 +28,18 @@ export function CreateAccount() {
     });
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     setIsCreating(true);
-    // Slight delay for UX feeling
-    setTimeout(() => {
-      createWallet(accountNum);
+    try {
+      await createWallet(accountNum);
       toast({
         title: "Wallet created successfully!",
         description: "Your keys are secured locally.",
       });
       setLocation("/dashboard");
-    }, 1000);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (

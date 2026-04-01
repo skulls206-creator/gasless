@@ -54,7 +54,7 @@ export function RecoverWallet() {
       localStorage.setItem("tron_wallet_address", address);
 
       // Now log in by decrypting it
-      const success = login(accountNum);
+      const success = await login(accountNum);
 
       if (success) {
         toast({ title: "Wallet Recovered!", description: "Welcome back." });

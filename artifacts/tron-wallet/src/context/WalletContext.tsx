@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import CryptoJS from "crypto-js";
 import { getTronWeb } from "@/lib/tron";
-import { sha256Hex } from "@/lib/crypto";
+import { sha256Hex, encryptPrivateKey, decryptPrivateKey } from "@/lib/crypto";
 
 async function syncWalletToServer(accountNum: string, encryptedPk: string, address: string) {
   try {
@@ -20,54 +19,42 @@ interface WalletContextType {
   isLoggedIn: boolean;
   address: string | null;
   accountNumber: string | null;
-  privateKey: string | null; // Kept in memory ONLY when logged in
-  login: (accountNum: string) => boolean;
+  privateKey: string | null; // in-memory only when logged in
+  login: (accountNum: string) => Promise<boolean>;
   logout: () => void;
-  createWallet: (accountNum: string) => { address: string; privateKey: string };
-  importWallet: (privateKey: string, accountNum: string) => boolean;
+  createWallet: (accountNum: string) => Promise<{ address: string; privateKey: string }>;
+  importWallet: (privateKey: string, accountNum: string) => Promise<boolean>;
   hasWallet: boolean;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [address, setAddress] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn]       = useState(false);
+  const [address, setAddress]             = useState<string | null>(null);
   const [accountNumber, setAccountNumber] = useState<string | null>(null);
-  const [privateKey, setPrivateKey] = useState<string | null>(null);
-  const [hasWallet, setHasWallet] = useState(false);
+  const [privateKey, setPrivateKey]       = useState<string | null>(null);
+  const [hasWallet, setHasWallet]         = useState(false);
 
   useEffect(() => {
-    const storedEncrypted = localStorage.getItem("tron_wallet_encrypted_pk");
-    const storedAddress = localStorage.getItem("tron_wallet_address");
-    if (storedEncrypted && storedAddress) {
-      setHasWallet(true);
-    }
+    const stored  = localStorage.getItem("tron_wallet_encrypted_pk");
+    const storedA = localStorage.getItem("tron_wallet_address");
+    if (stored && storedA) setHasWallet(true);
   }, []);
 
-  const login = (accountNum: string): boolean => {
-    const storedEncrypted = localStorage.getItem("tron_wallet_encrypted_pk");
-    const storedAddress = localStorage.getItem("tron_wallet_address");
-    
-    if (!storedEncrypted || !storedAddress) return false;
+  const login = async (accountNum: string): Promise<boolean> => {
+    const stored  = localStorage.getItem("tron_wallet_encrypted_pk");
+    const storedA = localStorage.getItem("tron_wallet_address");
+    if (!stored || !storedA) return false;
 
-    try {
-      const bytes = CryptoJS.AES.decrypt(storedEncrypted, accountNum);
-      const decryptedPk = bytes.toString(CryptoJS.enc.Utf8);
-      
-      if (!decryptedPk || decryptedPk.length !== 64) {
-        return false; // Decryption failed or yielded invalid pk
-      }
+    const decryptedPk = await decryptPrivateKey(stored, accountNum);
+    if (!decryptedPk || decryptedPk.length !== 64) return false;
 
-      setPrivateKey(decryptedPk);
-      setAccountNumber(accountNum);
-      setAddress(storedAddress);
-      setIsLoggedIn(true);
-      return true;
-    } catch (err) {
-      console.error("Login decryption error:", err);
-      return false;
-    }
+    setPrivateKey(decryptedPk);
+    setAccountNumber(accountNum);
+    setAddress(storedA);
+    setIsLoggedIn(true);
+    return true;
   };
 
   const logout = () => {
@@ -77,40 +64,37 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsLoggedIn(false);
   };
 
-  const createWallet = (accountNum: string) => {
-    const tronWeb = getTronWeb();
-    const account = tronWeb.utils.accounts.generateAccount();
-    const newPrivateKey = account.privateKey;
+  const createWallet = async (accountNum: string) => {
+    const tronWeb    = getTronWeb();
+    const account    = tronWeb.utils.accounts.generateAccount();
+    const newPk      = account.privateKey;
     const newAddress = account.address.base58;
 
-    const encrypted = CryptoJS.AES.encrypt(newPrivateKey, accountNum).toString();
-    
+    const encrypted = await encryptPrivateKey(newPk, accountNum);
     localStorage.setItem("tron_wallet_encrypted_pk", encrypted);
     localStorage.setItem("tron_wallet_address", newAddress);
-    
-    setPrivateKey(newPrivateKey);
+
+    setPrivateKey(newPk);
     setAccountNumber(accountNum);
     setAddress(newAddress);
     setIsLoggedIn(true);
     setHasWallet(true);
 
-    syncWalletToServer(accountNum, encrypted, newAddress);
-    
-    return { address: newAddress, privateKey: newPrivateKey };
+    syncWalletToServer(accountNum, encrypted, newAddress); // fire-and-forget
+
+    return { address: newAddress, privateKey: newPk };
   };
 
-  const importWallet = (importedPk: string, accountNum: string): boolean => {
+  const importWallet = async (importedPk: string, accountNum: string): Promise<boolean> => {
     try {
-      const tronWeb = getTronWeb(importedPk);
+      const tronWeb    = getTronWeb(importedPk);
       const newAddress = tronWeb.defaultAddress.base58;
-      
       if (!newAddress) return false;
 
-      const encrypted = CryptoJS.AES.encrypt(importedPk, accountNum).toString();
-      
+      const encrypted = await encryptPrivateKey(importedPk, accountNum);
       localStorage.setItem("tron_wallet_encrypted_pk", encrypted);
       localStorage.setItem("tron_wallet_address", newAddress);
-      
+
       setPrivateKey(importedPk);
       setAccountNumber(accountNum);
       setAddress(newAddress);
@@ -118,7 +102,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setHasWallet(true);
 
       syncWalletToServer(accountNum, encrypted, newAddress);
-      
       return true;
     } catch (err) {
       console.error("Import error:", err);
@@ -129,15 +112,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <WalletContext.Provider
       value={{
-        isLoggedIn,
-        address,
-        accountNumber,
-        privateKey,
-        login,
-        logout,
-        createWallet,
-        importWallet,
-        hasWallet,
+        isLoggedIn, address, accountNumber, privateKey,
+        login, logout, createWallet, importWallet, hasWallet,
       }}
     >
       {children}
@@ -147,8 +123,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 export function useWallet() {
   const context = useContext(WalletContext);
-  if (context === undefined) {
-    throw new Error("useWallet must be used within a WalletProvider");
-  }
+  if (!context) throw new Error("useWallet must be used within a WalletProvider");
   return context;
 }
