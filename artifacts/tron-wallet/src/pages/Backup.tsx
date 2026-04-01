@@ -34,10 +34,11 @@ export function Backup() {
   const [alertState, setAlertState] = useState<AlertState>("loading");
   const [alertWorking, setAlertWorking] = useState(false);
 
-  // Check current admin subscription status on mount / when section is opened
+  // Check current admin subscription status when section is opened
   useEffect(() => {
     if (!showAlerts) return;
 
+    // Synchronous checks first — no async needed
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setAlertState("unsupported");
       return;
@@ -46,32 +47,56 @@ export function Backup() {
       setAlertState("denied");
       return;
     }
+    // No permission yet → just show the subscribe form
+    if (Notification.permission !== "granted") {
+      setAlertState("unsubscribed");
+      return;
+    }
 
-    navigator.serviceWorker.ready.then(async (reg) => {
-      const sub = await reg.pushManager.getSubscription();
-      if (!sub) { setAlertState("unsubscribed"); return; }
+    // Permission already granted — check if subscribed (3 s timeout as safety net)
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      if (!cancelled) setAlertState("unsubscribed");
+    }, 3_000);
 
-      // Ask the server if this endpoint is an admin subscription
-      try {
-        const res = await fetch("/api/push/admin-status", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-secret": adminSecret,
-          },
-          body: JSON.stringify({ endpoint: sub.endpoint }),
-        });
-        if (res.ok) {
-          const { subscribed } = await res.json();
-          setAlertState(subscribed ? "subscribed" : "unsubscribed");
-        } else {
-          setAlertState("unsubscribed");
+    navigator.serviceWorker.getRegistration()
+      .then(async (reg) => {
+        if (cancelled) return;
+        if (!reg) { clearTimeout(timeout); setAlertState("unsubscribed"); return; }
+
+        const sub = await reg.pushManager.getSubscription();
+        if (cancelled) return;
+        if (!sub) { clearTimeout(timeout); setAlertState("unsubscribed"); return; }
+
+        // Ask the server if this endpoint is registered as admin
+        try {
+          const res = await fetch("/api/push/admin-status", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-admin-secret": adminSecret,
+            },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          });
+          if (!cancelled) {
+            clearTimeout(timeout);
+            if (res.ok) {
+              const { subscribed } = await res.json();
+              setAlertState(subscribed ? "subscribed" : "unsubscribed");
+            } else {
+              setAlertState("unsubscribed");
+            }
+          }
+        } catch {
+          if (!cancelled) { clearTimeout(timeout); setAlertState("unsubscribed"); }
         }
-      } catch {
-        setAlertState("unsubscribed");
-      }
-    });
-  }, [showAlerts, adminSecret]);
+      })
+      .catch(() => {
+        if (!cancelled) { clearTimeout(timeout); setAlertState("unsubscribed"); }
+      });
+
+    return () => { cancelled = true; clearTimeout(timeout); };
+  }, [showAlerts]); // adminSecret intentionally excluded — only re-check when section opens
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
