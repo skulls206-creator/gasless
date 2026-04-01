@@ -1,7 +1,7 @@
 import { useWallet } from "@/context/WalletContext";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
-import { Copy, AlertTriangle, ExternalLink } from "lucide-react";
+import { Copy, AlertTriangle, ExternalLink, Share2, Link } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   ContextMenu,
@@ -11,6 +11,11 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
+function getPaymentLink(address: string): string {
+  const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+  return `${window.location.origin}${base}/pay/${address}`;
+}
+
 export function Receive() {
   const { address } = useWallet();
   const { toast } = useToast();
@@ -19,6 +24,27 @@ export function Receive() {
     if (address) {
       navigator.clipboard.writeText(address);
       toast({ title: "Address Copied", description: "Share this to receive USDT." });
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (!address) return;
+    const link = getPaymentLink(address);
+    navigator.clipboard.writeText(link);
+    toast({ title: "Payment Link Copied", description: "Anyone can open this to send you USDT." });
+  };
+
+  const handleShare = async () => {
+    if (!address) return;
+    const link = getPaymentLink(address);
+    if (navigator.share) {
+      await navigator.share({
+        title: "Send me USDT via Gasless",
+        text: "Use this link to send me USDT (TRC-20) — no gas fees needed.",
+        url: link,
+      }).catch(() => {});
+    } else {
+      handleCopyLink();
     }
   };
 
@@ -72,6 +98,30 @@ export function Receive() {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      {/* Payment link card */}
+      {address && (
+        <div className="w-full max-w-sm bg-primary/5 border border-primary/20 rounded-2xl p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Link className="w-4 h-4 text-primary shrink-0" />
+            <p className="text-sm font-semibold text-foreground">Shareable Payment Link</p>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Share this link so anyone can send you USDT directly — no account needed on their end.
+          </p>
+          <p className="font-mono text-[11px] text-primary/80 bg-primary/5 rounded-lg px-3 py-2 break-all border border-primary/10">
+            {getPaymentLink(address)}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1 border-primary/20 text-primary hover:bg-primary/10" onClick={handleCopyLink}>
+              <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+            </Button>
+            <Button variant="outline" size="sm" className="flex-1 border-primary/20 text-primary hover:bg-primary/10" onClick={handleShare}>
+              <Share2 className="w-3.5 h-3.5 mr-1.5" /> Share
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="w-full max-w-sm flex gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive-foreground/90">
         <AlertTriangle className="w-6 h-6 text-destructive shrink-0" />

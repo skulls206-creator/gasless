@@ -15,6 +15,18 @@ function getFeeRecipient(): string | null {
 
 const router: IRouter = Router();
 
+function requireAdmin(req: any, res: any, next: any) {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) return next(); // No secret set → open (dev/initial setup)
+  const provided =
+    req.headers["x-admin-secret"] ||
+    req.query.secret;
+  if (provided !== secret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  return next();
+}
+
 router.get("/config", (_req, res): void => {
   const feeRecipient = getFeeRecipient();
   res.json({
@@ -71,7 +83,7 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/admin/status", async (_req, res): Promise<void> => {
+router.get("/admin/status", requireAdmin, async (_req, res): Promise<void> => {
   try {
     const status = await getSponsorStatus();
     res.json(status);
@@ -80,7 +92,7 @@ router.get("/admin/status", async (_req, res): Promise<void> => {
   }
 });
 
-router.post("/admin/stake", async (req, res): Promise<void> => {
+router.post("/admin/stake", requireAdmin, async (req, res): Promise<void> => {
   const { amountTRX } = req.body;
   const amount = parseFloat(amountTRX);
 

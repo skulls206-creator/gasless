@@ -15,15 +15,20 @@ import { toast } from "sonner";
 export function History() {
   const { address } = useWallet();
   const {
-    data: transactions,
+    data,
     isLoading,
     isError,
     error,
     refetch,
     isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
   } = useUSDTTransactions(address);
 
-  const isEmpty = !transactions || transactions.length === 0;
+  // Flatten all pages into a single transaction list
+  const transactions = data?.pages.flatMap((p) => p.data) ?? [];
+  const isEmpty = transactions.length === 0;
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => toast.success(`${label} copied`));
@@ -75,7 +80,7 @@ export function History() {
 
       {!isLoading && !isError && !isEmpty && (
         <div className="space-y-3">
-          {transactions!.map((tx) => {
+          {transactions.map((tx) => {
             const isReceive = tx.to?.toLowerCase() === address?.toLowerCase();
             const amount = parseFloat(tx.value) / Math.pow(10, tx.token_info?.decimals ?? 6);
             const date = new Date(tx.block_timestamp).toLocaleDateString(undefined, {
@@ -109,9 +114,7 @@ export function History() {
                         </p>
                         <p className="text-xs text-muted-foreground">{date}</p>
                         <p className="text-xs text-muted-foreground">
-                          {isReceive
-                            ? `From ${formatAddress(tx.from)}`
-                            : `To ${formatAddress(tx.to)}`}
+                          {isReceive ? `From ${formatAddress(tx.from)}` : `To ${formatAddress(tx.to)}`}
                         </p>
                       </div>
                     </div>
@@ -128,31 +131,16 @@ export function History() {
                   </a>
                 </ContextMenuTrigger>
                 <ContextMenuContent className="w-52">
-                  <ContextMenuItem
-                    onClick={(e) => {
-                      e.preventDefault();
-                      copy(tx.transaction_id, "Transaction hash");
-                    }}
-                  >
+                  <ContextMenuItem onClick={(e) => { e.preventDefault(); copy(tx.transaction_id, "Transaction hash"); }}>
                     <Copy className="w-3.5 h-3.5 mr-2" />
                     Copy TX hash
                   </ContextMenuItem>
-                  <ContextMenuItem
-                    onClick={(e) => {
-                      e.preventDefault();
-                      copy(isReceive ? tx.from : tx.to, "Address");
-                    }}
-                  >
+                  <ContextMenuItem onClick={(e) => { e.preventDefault(); copy(isReceive ? tx.from : tx.to, "Address"); }}>
                     <Copy className="w-3.5 h-3.5 mr-2" />
                     Copy {isReceive ? "sender" : "recipient"} address
                   </ContextMenuItem>
                   <ContextMenuSeparator />
-                  <ContextMenuItem
-                    onClick={(e) => {
-                      e.preventDefault();
-                      window.open(tronscanUrl, "_blank", "noreferrer");
-                    }}
-                  >
+                  <ContextMenuItem onClick={(e) => { e.preventDefault(); window.open(tronscanUrl, "_blank", "noreferrer"); }}>
                     <ExternalLink className="w-3.5 h-3.5 mr-2" />
                     View on Tronscan
                   </ContextMenuItem>
@@ -160,6 +148,22 @@ export function History() {
               </ContextMenu>
             );
           })}
+
+          {/* Load more */}
+          {hasNextPage && (
+            <Button
+              variant="outline"
+              className="w-full mt-2"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? (
+                <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Loading…</>
+              ) : (
+                "Load More"
+              )}
+            </Button>
+          )}
         </div>
       )}
     </div>

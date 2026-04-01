@@ -164,4 +164,68 @@ router.post("/tron/build-transfer", async (req, res) => {
   }
 });
 
+// ── Account resources proxy ────────────────────────────────────────────────
+router.get("/tron/resources/:address", async (req, res) => {
+  const { address } = req.params;
+  if (!address || address.length < 30) {
+    return res.status(400).json({ error: "Invalid address" });
+  }
+
+  try {
+    const response = await tronFetchWithRetry(
+      `${TRONGRID_API_URL}/v1/accounts/${encodeURIComponent(address)}`,
+    );
+    const json: any = await response.json();
+    const data = json.data?.[0] ?? {};
+
+    const freeNetLimit = data.freeNetLimit ?? 0;
+    const freeNetUsed = data.freeNetUsed ?? 0;
+    const NetLimit = data.NetLimit ?? 0;
+    const NetUsed = data.NetUsed ?? 0;
+    const EnergyLimit = data.account_resource?.EnergyLimit ?? 0;
+    const EnergyUsed = data.account_resource?.EnergyUsed ?? 0;
+    const availableBandwidth = (freeNetLimit - freeNetUsed) + (NetLimit - NetUsed);
+    const availableEnergy = EnergyLimit - EnergyUsed;
+
+    return res.json({
+      freeNetLimit, freeNetUsed, NetLimit, NetUsed,
+      EnergyLimit, EnergyUsed,
+      availableBandwidth,
+      availableEnergy,
+      isSufficientForTRC20: availableBandwidth >= 300 && availableEnergy >= 13_000,
+    });
+  } catch (err: any) {
+    console.error("[resources] error:", err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? "Failed to fetch resources" });
+  }
+});
+
+// ── TRC-20 transaction history proxy ───────────────────────────────────────
+router.get("/tron/transactions/:address", async (req, res) => {
+  const { address } = req.params;
+  const { fingerprint, limit = "50" } = req.query as { fingerprint?: string; limit?: string };
+
+  if (!address || address.length < 30) {
+    return res.status(400).json({ error: "Invalid address" });
+  }
+
+  try {
+    let url =
+      `${TRONGRID_API_URL}/v1/accounts/${encodeURIComponent(address)}/transactions/trc20` +
+      `?contract_address=${USDT_CONTRACT_ADDRESS}&limit=${Number(limit) || 50}&only_confirmed=true`;
+    if (fingerprint) url += `&fingerprint=${encodeURIComponent(fingerprint)}`;
+
+    const response = await tronFetchWithRetry(url);
+    const json: any = await response.json();
+
+    return res.json({
+      data: Array.isArray(json.data) ? json.data : [],
+      meta: json.meta ?? {},
+    });
+  } catch (err: any) {
+    console.error("[transactions] error:", err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? "Failed to fetch transactions" });
+  }
+});
+
 export default router;

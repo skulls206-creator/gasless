@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, useParams } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,6 +18,7 @@ import { Receive } from "@/pages/Receive";
 import { History } from "@/pages/History";
 import { Pay } from "@/pages/Pay";
 import { Backup } from "@/pages/Backup";
+import { PayLink } from "@/pages/PayLink";
 import { useEffect } from "react";
 import { KhurkOSBanner } from "@/components/ui/KhurkOSBanner";
 
@@ -30,25 +31,48 @@ const queryClient = new QueryClient({
   },
 });
 
+function PayLinkWrapper() {
+  const params = useParams<{ address: string }>();
+  return <PayLink toAddress={params.address} />;
+}
+
 function AuthGuard() {
   const { isLoggedIn, hasWallet } = useWallet();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
     const publicRoutes = ["/", "/login", "/create", "/import", "/recover"];
+    const isPayRoute = location.startsWith("/pay/");
+
     if (!isLoggedIn) {
+      if (isPayRoute) return; // Let PayLink handle itself
       if (hasWallet && !["/login", "/create", "/import", "/recover"].includes(location)) {
         setLocation("/login");
       } else if (!hasWallet && !publicRoutes.includes(location)) {
         setLocation("/");
       }
     } else {
-      // If logged in and on public routes, go to dashboard
-      if (publicRoutes.includes(location)) {
+      // After login, check if there's a pending payment destination
+      const payTo = sessionStorage.getItem("gasless_pay_to");
+      if (payTo) {
+        sessionStorage.removeItem("gasless_pay_to");
+        setLocation(`/send?to=${encodeURIComponent(payTo)}`);
+        return;
+      }
+      if (publicRoutes.includes(location) && !isPayRoute) {
         setLocation("/dashboard");
       }
     }
   }, [isLoggedIn, hasWallet, location, setLocation]);
+
+  // Pay link is always accessible regardless of auth state
+  if (location.startsWith("/pay/")) {
+    return (
+      <Switch>
+        <Route path="/pay/:address" component={PayLinkWrapper} />
+      </Switch>
+    );
+  }
 
   if (!isLoggedIn) {
     return (

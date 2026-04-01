@@ -124,7 +124,7 @@ export function Dashboard() {
               <div className="mt-4 p-3 rounded-xl bg-primary/10 border border-primary/20 flex gap-3 items-start">
                 <AlertTriangle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                 <p className="text-xs text-primary-foreground/90 leading-relaxed">
-                  Low resources — your next transaction will consume a tiny amount of TRX (usually &lt;$0.10) to cover the network fee.
+                  Low network resources — if Gasless can't sponsor your send, the network will charge ~1–3 TRX (~$0.10–$0.30) from your wallet. Top up TRX or the sponsor covers it automatically.
                 </p>
               </div>
             )}

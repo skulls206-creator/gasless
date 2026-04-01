@@ -78,6 +78,8 @@
   },
   "dependencies": {
     "@zkp2p/sdk": "0.1.0-rc.14",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "crypto-js": "^4.2.0",
     "qrcode.react": "^4.2.0",
     "tronweb": "^6.2.2",

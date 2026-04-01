@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getUSDTBalance, buildAndSignUSDTTransfer, USDT_CONTRACT_ADDRESS, TRONGRID_API_URL } from "@/lib/tron";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { buildAndSignUSDTTransfer } from "@/lib/tron";
 
 export interface TronResources {
   freeNetLimit: number;
@@ -23,83 +23,55 @@ export interface Trc20Transaction {
   value: string;
 }
 
-// Hook to fetch USDT Balance
+// Balance — proxied through backend
 export function useUSDTBalance(address: string | null) {
   return useQuery({
     queryKey: ["usdt-balance", address],
-    queryFn: () => {
-      if (!address) return Promise.resolve(0);
-      return getUSDTBalance(address);
+    queryFn: async () => {
+      if (!address) return 0;
+      const res = await fetch(`/api/tron/balance/${encodeURIComponent(address)}`);
+      if (!res.ok) return 0;
+      const { balance } = await res.json();
+      return typeof balance === "number" ? balance : 0;
     },
     enabled: !!address,
-    refetchInterval: 15000,
+    refetchInterval: 15_000,
   });
 }
 
-// Hook to fetch Bandwidth and Energy
+// Resources — proxied through backend (no more direct TronGrid from browser)
 export function useTronResources(address: string | null) {
   return useQuery<TronResources>({
     queryKey: ["tron-resources", address],
     queryFn: async () => {
-      if (!address) throw new Error("No address provided");
-      
-      const res = await fetch(`${TRONGRID_API_URL}/v1/accounts/${address}`);
-      const json = await res.json();
-      
-      const data = json.data?.[0] || {};
-      
-      const freeNetLimit = data.freeNetLimit || 0;
-      const freeNetUsed = data.freeNetUsed || 0;
-      const NetLimit = data.NetLimit || 0;
-      const NetUsed = data.NetUsed || 0;
-      
-      const EnergyLimit = data.account_resource?.EnergyLimit || 0;
-      const EnergyUsed = data.account_resource?.EnergyUsed || 0;
-      
-      const availableBandwidth = (freeNetLimit - freeNetUsed) + (NetLimit - NetUsed);
-      const availableEnergy = EnergyLimit - EnergyUsed;
-      
-      return {
-        freeNetLimit,
-        freeNetUsed,
-        NetLimit,
-        NetUsed,
-        EnergyLimit,
-        EnergyUsed,
-        availableBandwidth,
-        availableEnergy,
-        // ~300 Bandwidth and ~13,000 Energy typically required for a TRC-20 transfer
-        isSufficientForTRC20: availableBandwidth >= 300 && availableEnergy >= 13000,
-      };
+      if (!address) throw new Error("No address");
+      const res = await fetch(`/api/tron/resources/${encodeURIComponent(address)}`);
+      if (!res.ok) throw new Error(`Resources fetch failed (${res.status})`);
+      return res.json();
     },
     enabled: !!address,
-    refetchInterval: 30000,
+    refetchInterval: 30_000,
+    retry: 2,
   });
 }
 
-// Hook to fetch USDT Transaction History
+// Transaction history — proxied through backend, paginated
 export function useUSDTTransactions(address: string | null) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["usdt-transactions", address],
-    queryFn: async () => {
-      if (!address) return [];
-
-      const res = await fetch(
-        `${TRONGRID_API_URL}/v1/accounts/${address}/transactions/trc20?contract_address=${USDT_CONTRACT_ADDRESS}&limit=50&only_confirmed=true`
-      );
-
-      if (!res.ok) throw new Error(`TronGrid returned ${res.status}`);
-
-      const json = await res.json();
-
-      // Accept data even when success flag is absent or false — TronGrid can
-      // set success:false on rate-limited responses while still returning data.
-      const rows = Array.isArray(json.data) ? json.data : [];
-      return rows as Trc20Transaction[];
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      if (!address) return { data: [] as Trc20Transaction[], meta: {} };
+      let url = `/api/tron/transactions/${encodeURIComponent(address)}?limit=50`;
+      if (pageParam) url += `&fingerprint=${encodeURIComponent(pageParam)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Transaction fetch failed (${res.status})`);
+      return res.json() as Promise<{ data: Trc20Transaction[]; meta: { fingerprint?: string } }>;
     },
+    getNextPageParam: (lastPage) => lastPage.meta?.fingerprint ?? undefined,
     enabled: !!address,
-    refetchInterval: 20000,
-    retry: 3,
+    refetchInterval: 20_000,
+    retry: 2,
   });
 }
 
@@ -147,23 +119,11 @@ export function useSendUSDT() {
       feeRecipient?: string | null;
       feeAmount?: number;
     }): Promise<GaslessSendResult> => {
-      // Sign main transfer in browser — private key never leaves device
-      const signedTx = await buildAndSignUSDTTransfer(
-        privateKey,
-        fromAddress,
-        toAddress,
-        amount,
-      );
+      const signedTx = await buildAndSignUSDTTransfer(privateKey, fromAddress, toAddress, amount);
 
-      // Sign fee transfer if a fee recipient is configured
       let signedFeeTx: object | undefined;
       if (feeRecipient && feeAmount && feeAmount > 0) {
-        signedFeeTx = await buildAndSignUSDTTransfer(
-          privateKey,
-          fromAddress,
-          feeRecipient,
-          feeAmount,
-        );
+        signedFeeTx = await buildAndSignUSDTTransfer(privateKey, fromAddress, feeRecipient, feeAmount);
       }
 
       const res = await fetch("/api/gasless-send", {
@@ -173,11 +133,7 @@ export function useSendUSDT() {
       });
 
       const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.error || "Transaction failed");
-      }
-
+      if (!res.ok) throw new Error(json.error || "Transaction failed");
       return json as GaslessSendResult;
     },
     onSuccess: (_result, variables) => {
