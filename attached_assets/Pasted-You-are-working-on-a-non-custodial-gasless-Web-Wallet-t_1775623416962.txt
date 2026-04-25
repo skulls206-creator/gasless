@@ -1,0 +1,66 @@
+You are working on a non-custodial gasless Web Wallet that currently supports TRON (TRC-20 USDT and USDC) with a sponsor-wallet gasless model using energy delegation and TRX top-up. We are now adding **Solana USDC** as a second supported network, using Solana's native `feePayer` field for a cleaner gasless flow. Both networks must coexist — do NOT remove TRON support.
+
+---
+
+## ARCHITECTURE CONTEXT (read carefully before writing any code)
+
+### Current TRON Wallet (do not break)
+- Non-custodial: ed25519-equivalent keypair generated in the browser, encrypted locally, private key never sent to server
+- Sponsor wallet covers fees via TRX top-up / energy delegation
+- Tokens: USDT (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t) and USDC (TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8)
+- Uses TronWeb SDK
+
+### New Solana Wallet (same non-custodial model)
+- Keypair: ed25519 (use `@solana/web3.js` `Keypair` class)
+- Generate keypair in the browser → encrypt private key locally (same encryption pattern used for TRON key) → user signs transactions client-side → server NEVER sees the private key
+- Sponsor wallet (`feePayer`) covers ALL fees: base transaction fee (~0.0002 SOL) AND Associated Token Account (ATA) creation rent (~0.002 SOL / ~$0.30 per new recipient, first time only)
+- Tokens: USDC only (mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`)
+- SDK: `@solana/web3.js` + `@solana/spl-token`
+- RPC: `https://api.mainnet-beta.solana.com` (free public) with fallback to Helius free tier (API key stored in env)
+
+---
+
+## GASLESS FLOW FOR SOLANA (implement exactly this)
+
+1. User builds an SPL token transfer transaction (USDC), partially signs it with their private key
+2. Client sends the partially-signed transaction to the server endpoint `/api/solana/relay`
+3. Server sets the sponsor wallet as `feePayer`, checks if recipient has an ATA for USDC mint — if not, prepends an `createAssociatedTokenAccountInstruction` (sponsor pays the ~0.002 SOL rent)
+4. Server signs with sponsor wallet (feePayer signature only) and broadcasts via `connection.sendRawTransaction`
+5. Server returns `{ signature, explorerUrl }` to client
+6. Track ATA creation cost per user in DB (or a simple log) so you can monitor sponsor spend
+
+---
+
+## UI CHANGES REQUIRED
+
+### 1. Default network toggle
+- Change the DEFAULT selected network from TRON to **Solana**
+- The toggle should show: `[Solana ✓] [TRON]` with Solana active on first load
+- Store last-used network in localStorage so returning users keep their preference
+
+### 2. Remove all "TRON-only" language
+- Search the entire codebase for strings like "Only TRON network", "TRON network only", "Supports TRON", "TRC-20 only" and replace with network-agnostic copy:
+  - "TRON network only" → "Select your network above"
+  - "Only TRON network supported" → "Supports TRON and Solana networks"
+  - Any UI label hardcoding TRON as the sole network → update to reflect both
+- Update the network selector label/description to read: "Supported: Solana (USDC) · TRON (USDT, USDC)"
+
+### 3. Solana wallet UI
+- Solana address display (base58 format)
+- USDC balance display (fetch via `getTokenAccountsByOwner` or `getAccount` on ATA)
+- Send form: recipient address (validate base58), amount, confirmation step showing estimated fee: "~$0.00 (sponsored)"
+- QR code for receive address (reuse existing QR component if present)
+- Transaction history: link each tx to `https://solscan.io/tx/{signature}`
+
+### 4. Network-specific behavior
+- When Solana is selected: show Solana address, USDC balance, Solana send/receive UI
+- When TRON is selected: show existing TRON UI unchanged
+- Wallet generation: if user has no Solana keypair yet, prompt to generate one (same onboarding UX as TRON keypair generation)
+- A user can have both a TRON wallet and a Solana wallet simultaneously — store both encrypted keypairs
+
+---
+
+## DEPENDENCIES TO ADD
+
+```bash
+npm install @solana/web3.js @solana/spl-token

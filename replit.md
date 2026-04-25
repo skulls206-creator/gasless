@@ -1,3 +1,8 @@
+# Agent Guidelines
+
+- **Surgical changes only** — touch only what the task requires; don't refactor, reformat, or delete adjacent code. If you spot unrelated dead code, mention it but don't remove it.
+- **No speculative abstractions** — don't add configurability, flexibility, or error handling for scenarios that don't exist yet. Build exactly what was asked, nothing more.
+
 # Workspace
 
 ## Overview

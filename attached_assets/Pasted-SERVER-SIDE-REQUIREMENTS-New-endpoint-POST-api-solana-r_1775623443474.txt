@@ -1,0 +1,84 @@
+SERVER-SIDE REQUIREMENTS
+New endpoint: POST /api/solana/relay
+text
+Input:  { serializedTransaction: string (base64), recipientAddress: string, amount: number }
+Output: { signature: string, explorerUrl: string } or { error: string }
+Deserialize the transaction from base64
+
+Verify it only contains one SPL token transfer instruction (and optionally one ATA creation) — reject anything else for security
+
+Set feePayer to sponsor wallet pubkey
+
+If recipient has no ATA for USDC mint, prepend createAssociatedTokenAccountInstruction(sponsorWallet, recipientATA, recipientPubkey, USDC_MINT)
+
+Sign with sponsor wallet keypair (loaded from env: SOLANA_SPONSOR_PRIVATE_KEY as base58 or JSON array)
+
+Broadcast and return signature
+
+Environment variables to add
+text
+SOLANA_SPONSOR_PRIVATE_KEY=<base58 or JSON array>
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+HELIUS_API_KEY=<optional, for higher RPC limits>
+CONSTANTS (use exactly these)
+js
+const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const SOLANA_RPC_MAINNET = 'https://api.mainnet-beta.solana.com';
+WHAT NOT TO CHANGE
+Do not modify the TRON wallet logic, keys, or UI components
+
+Do not change the existing user authentication or session system
+
+Do not remove or rename any existing API endpoints
+
+Do not change the encryption scheme for stored keys — apply the same scheme to Solana keypairs
+
+IMPLEMENTATION ORDER (follow this sequence)
+Install dependencies
+
+Add Solana constants and connection helper (singleton Connection instance)
+
+Add solanaWallet.js (or .ts) client utility: keygen, encrypt/decrypt keypair, get USDC balance, build+partially-sign transfer tx
+
+Add /api/solana/relay server endpoint
+
+Update network toggle UI to default to Solana
+
+Add Solana wallet UI components (address, balance, send, receive)
+
+Update all hardcoded TRON-only copy throughout the codebase
+
+Test: generate Solana keypair → receive USDC → send USDC via sponsor → verify signature on Solscan
+
+EXPECTED OUTPUT
+When done, the wallet should:
+
+Default to Solana on first load
+
+Allow users to generate a Solana ed25519 keypair, encrypted locally
+
+Show live USDC balance on Solana
+
+Send USDC gaslessly (sponsor covers feePayer + ATA creation if needed)
+
+Still fully support TRON USDT/USDC with zero regressions
+
+Have no UI text claiming it's "TRON only" or implying TRON is the only network
+
+text
+
+***
+
+## Why This Prompt Works
+
+The prompt is structured to prevent the most common Replit AI failure modes:
+
+- **Architecture context first** — the agent knows what already exists so it doesn't rewrite working TRON code 
+- **Exact flow specification** — the 5-step gasless relay flow is explicit enough that the agent can't guess wrong on the feePayer pattern 
+- **Exact mint addresses and constants** — eliminates hallucination risk on the USDC mint (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`) 
+- **"What NOT to change" section** — Replit agents often over-edit; this constrains scope explicitly
+- **Ordered implementation steps** — gives the agent a dependency-safe build sequence (constants → utility → API → UI), which reduces mid-build breakage
+- **ATA cost tracking** — included so the agent doesn't silently skip the $0.30/new-user sponsor cost that could drain your sponsor wallet without visibility 
+- **Security instruction on relay endpoint** — the instruction to validate the transaction contains only one SPL transfer prevents a user from submitting a malicious tx for the sponsor to sign 
+
+You may want to also tell Replit: *"After completing step 4 (the relay endpoint), pause and show me the relay endpoint code before continuing"* — this lets you catch any security issues in the most sensitive piece before the UI is built on top of it.
