@@ -35,7 +35,7 @@ export function useUSDTBalance(address: string | null) {
       return typeof balance === "number" ? balance : 0;
     },
     enabled: !!address,
-    refetchInterval: 15_000,
+    refetchInterval: 45_000,
   });
 }
 
@@ -50,7 +50,7 @@ export function useTronResources(address: string | null) {
       return res.json();
     },
     enabled: !!address,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
     retry: 2,
   });
 }
@@ -70,7 +70,7 @@ export function useUSDTTransactions(address: string | null) {
     },
     getNextPageParam: (lastPage) => lastPage.meta?.fingerprint ?? undefined,
     enabled: !!address,
-    refetchInterval: 20_000,
+    refetchInterval: 60_000,
     retry: 2,
   });
 }

@@ -2,6 +2,26 @@ import { TronWeb } from "tronweb";
 
 const TRONGRID = "https://api.trongrid.io";
 
+/** Retry a TronWeb SDK call up to maxTries times on 429 / rate-limit errors. */
+async function withRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> {
+  let delay = 1500;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const msg: string = err?.message ?? "";
+      const is429 = msg.includes("429") || msg.includes("Too Many") || msg.includes("rate");
+      if (!is429 || attempt >= maxTries) throw err;
+      lastErr = err;
+      console.warn(`[sponsor] TronGrid 429 — retry ${attempt}/${maxTries} in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+  throw lastErr;
+}
+
 const MIN_ENERGY_FOR_USDT = 65_000;
 const TRX_TOPUP_AMOUNT_SUN = 2_000_000;   // 2 TRX sent to user
 const TRX_TOPUP_THRESHOLD_SUN = 1_000_000; // top-up if user < 1 TRX
@@ -34,8 +54,8 @@ export async function getSponsorStatus() {
 
   try {
     const [account, resources] = await Promise.all([
-      tronWeb.trx.getAccount(address),
-      tronWeb.trx.getAccountResources(address),
+      withRetry(() => tronWeb.trx.getAccount(address)),
+      withRetry(() => tronWeb.trx.getAccountResources(address)),
     ]);
 
     const trxBalance      = ((account as any).balance || 0) / 1_000_000;
@@ -90,7 +110,7 @@ export async function topUpUserTRX(
   if (!tronWeb || !sponsorAddress) throw new Error("Sponsor wallet not configured");
 
   // Check user TRX balance
-  const userAccount   = await tronWeb.trx.getAccount(userAddress);
+  const userAccount   = await withRetry(() => tronWeb.trx.getAccount(userAddress));
   const userBalanceSun: number = (userAccount as any).balance ?? 0;
 
   if (userBalanceSun >= TRX_TOPUP_THRESHOLD_SUN) {
@@ -99,7 +119,7 @@ export async function topUpUserTRX(
   }
 
   // Check sponsor has enough TRX to spare
-  const sponsorAccount   = await tronWeb.trx.getAccount(sponsorAddress);
+  const sponsorAccount   = await withRetry(() => tronWeb.trx.getAccount(sponsorAddress));
   const sponsorBalanceSun: number = (sponsorAccount as any).balance ?? 0;
 
   if (sponsorBalanceSun < TRX_TOPUP_AMOUNT_SUN + TRX_SPONSOR_RESERVE_SUN) {
@@ -114,10 +134,10 @@ export async function topUpUserTRX(
     `(user had ${userBalanceSun / 1e6} TRX)`,
   );
 
-  const tx       = await tronWeb.transactionBuilder.sendTrx(userAddress, TRX_TOPUP_AMOUNT_SUN, sponsorAddress);
+  const tx       = await withRetry(() => tronWeb.transactionBuilder.sendTrx(userAddress, TRX_TOPUP_AMOUNT_SUN, sponsorAddress));
   const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
   const signedTx = await tronWeb.trx.sign(tx, pk);
-  const result   = await tronWeb.trx.sendRawTransaction(signedTx);
+  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
 
   if (!(result as any).result && !(result as any).txid) {
     throw new Error(`TRX top-up failed: ${JSON.stringify(result)}`);
@@ -138,14 +158,14 @@ export async function delegateEnergyToUser(userAddress: string, txCount = 1): Pr
 
   const energyNeeded = MIN_ENERGY_FOR_USDT * txCount;
 
-  const userResources    = await tronWeb.trx.getAccountResources(userAddress);
+  const userResources    = await withRetry(() => tronWeb.trx.getAccountResources(userAddress));
   const userEnergy       = ((userResources as any).EnergyLimit || 0) - ((userResources as any).EnergyUsed || 0);
   if (userEnergy >= energyNeeded) {
     console.log(`[sponsor] User ${userAddress} has ${userEnergy} energy — skipping delegation`);
     return;
   }
 
-  const sponsorResources = await tronWeb.trx.getAccountResources(sponsorAddress);
+  const sponsorResources = await withRetry(() => tronWeb.trx.getAccountResources(sponsorAddress));
   const sponsorEnergy    = ((sponsorResources as any).EnergyLimit || 0) - ((sponsorResources as any).EnergyUsed || 0);
   if (sponsorEnergy < energyNeeded) {
     throw new Error(`Sponsor energy insufficient (${sponsorEnergy} available, ${energyNeeded} needed)`);
@@ -156,12 +176,12 @@ export async function delegateEnergyToUser(userAddress: string, txCount = 1): Pr
 
   console.log(`[sponsor] Delegating ${delegateSun} sun ENERGY from ${sponsorAddress} to ${userAddress}`);
 
-  const tx = await (tronWeb.transactionBuilder as any).delegateResource(
+  const tx = await withRetry(() => (tronWeb.transactionBuilder as any).delegateResource(
     delegateSun, userAddress, "ENERGY", sponsorAddress, false,
-  );
+  ));
   const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
   const signedTx = await tronWeb.trx.sign(tx, pk);
-  const result   = await tronWeb.trx.sendRawTransaction(signedTx);
+  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
 
   if (!(result as any).result) throw new Error(`Delegation failed: ${JSON.stringify(result)}`);
   console.log(`[sponsor] Delegation tx: ${(result as any).txid} — waiting 6 s…`);
@@ -170,7 +190,7 @@ export async function delegateEnergyToUser(userAddress: string, txCount = 1): Pr
 
 export async function broadcastSignedTx(signedTx: object): Promise<{ txid: string }> {
   const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
-  const result  = await tronWeb.trx.sendRawTransaction(signedTx);
+  const result  = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
 
   if (!(result as any).result && !(result as any).txid) {
     throw new Error(`Broadcast failed: ${JSON.stringify(result)}`);
