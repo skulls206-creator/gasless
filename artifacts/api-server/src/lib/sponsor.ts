@@ -139,8 +139,8 @@ export async function topUpUserTRX(
   const signedTx = await tronWeb.trx.sign(tx, pk);
   const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
 
-  if (!(result as any).result && !(result as any).txid) {
-    throw new Error(`TRX top-up failed: ${JSON.stringify(result)}`);
+  if ((result as any).result !== true) {
+    throw new Error(`TRX top-up failed — ${decodeTronError(result)}`);
   }
 
   const txid = (result as any).txid as string;
@@ -183,17 +183,33 @@ export async function delegateEnergyToUser(userAddress: string, txCount = 1): Pr
   const signedTx = await tronWeb.trx.sign(tx, pk);
   const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
 
-  if (!(result as any).result) throw new Error(`Delegation failed: ${JSON.stringify(result)}`);
+  if ((result as any).result !== true) throw new Error(`Delegation failed — ${decodeTronError(result)}`);
   console.log(`[sponsor] Delegation tx: ${(result as any).txid} — waiting 6 s…`);
   await new Promise((r) => setTimeout(r, 6_000));
+}
+
+/** Decode a TronGrid hex error message to a human-readable string. */
+function decodeTronError(result: any): string {
+  const code: string = result?.code ?? "";
+  const msgHex: string = result?.message ?? "";
+  let msg = "";
+  try {
+    msg = msgHex ? Buffer.from(msgHex, "hex").toString("utf8").replace(/\x00/g, "").trim() : "";
+  } catch { /* ignore */ }
+  return msg ? `${code}: ${msg}` : (code || JSON.stringify(result));
 }
 
 export async function broadcastSignedTx(signedTx: object): Promise<{ txid: string }> {
   const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
   const result  = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
 
-  if (!(result as any).result && !(result as any).txid) {
-    throw new Error(`Broadcast failed: ${JSON.stringify(result)}`);
+  // TronGrid returns { result: true, txid } on success,
+  // or { result: false, code: "TAPOS_ERROR", message: "<hex>" } on failure.
+  // It can also return { code: "...", message: "..." } without a result field.
+  const ok = (result as any).result === true;
+  if (!ok) {
+    const errMsg = decodeTronError(result);
+    throw new Error(`Broadcast rejected by network — ${errMsg}`);
   }
   return { txid: (result as any).txid };
 }

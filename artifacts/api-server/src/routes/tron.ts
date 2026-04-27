@@ -144,7 +144,7 @@ router.post("/tron/build-transfer", async (req, res) => {
       (tronWeb.transactionBuilder as any).triggerSmartContract(
         USDT_CONTRACT_ADDRESS,
         "transfer(address,uint256)",
-        { feeLimit: 150_000_000 },
+        { feeLimit: 150_000_000, expiration: 600_000 },  // 10-minute window (default is 60s)
         [
           { type: "address", value: toAddress },
           { type: "uint256", value: amountInSun },
