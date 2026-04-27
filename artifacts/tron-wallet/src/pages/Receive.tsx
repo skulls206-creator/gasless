@@ -58,7 +58,7 @@ export function Receive() {
       <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-white/10 dark:border-white/5">
         {address ? (
           <QRCodeCanvas
-            value={address}
+            value={getPaymentLink(address)}
             size={220}
             level="H"
             marginSize={2}
