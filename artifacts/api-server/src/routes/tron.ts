@@ -165,6 +165,8 @@ router.post("/tron/build-transfer", async (req, res) => {
 });
 
 // ── Account resources proxy ────────────────────────────────────────────────
+// Uses /wallet/getaccountresource (not /v1/accounts) so that delegated-in
+// energy is included in EnergyLimit, not just the user's own staked energy.
 router.get("/tron/resources/:address", async (req, res) => {
   const { address } = req.params;
   if (!address || address.length < 30) {
@@ -173,17 +175,21 @@ router.get("/tron/resources/:address", async (req, res) => {
 
   try {
     const response = await tronFetchWithRetry(
-      `${TRONGRID_API_URL}/v1/accounts/${encodeURIComponent(address)}`,
+      `${TRONGRID_API_URL}/wallet/getaccountresource`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, visible: true }),
+      },
     );
-    const json: any = await response.json();
-    const data = json.data?.[0] ?? {};
+    const data: any = await response.json();
 
-    const freeNetLimit = data.freeNetLimit ?? 0;
+    const freeNetLimit = data.freeNetLimit ?? 600;
     const freeNetUsed = data.freeNetUsed ?? 0;
     const NetLimit = data.NetLimit ?? 0;
     const NetUsed = data.NetUsed ?? 0;
-    const EnergyLimit = data.account_resource?.EnergyLimit ?? 0;
-    const EnergyUsed = data.account_resource?.EnergyUsed ?? 0;
+    const EnergyLimit = data.EnergyLimit ?? 0;
+    const EnergyUsed = data.EnergyUsed ?? 0;
     const availableBandwidth = (freeNetLimit - freeNetUsed) + (NetLimit - NetUsed);
     const availableEnergy = EnergyLimit - EnergyUsed;
 
