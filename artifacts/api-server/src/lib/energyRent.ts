@@ -1,5 +1,3 @@
-import { TronWeb } from "tronweb";
-
 /**
  * On-demand TRON energy rental.
  *
@@ -259,7 +257,8 @@ export async function getRentalBalance(): Promise<{
   const provider = getProvider();
   try {
     const trxBalance    = provider === "erp" ? await getERPBalance() : await getFeeeBalance();
-    // Approx 0.013 TRX per send for feee V3; 2.86 TRX for erp (1h rental)
+    // Heuristic cost per send: feee V3 ~0.013 TRX (5-min, 65k energy);
+    // erp ~2.86 TRX (1-hour, 44 SUN/energy). Used only for admin telemetry.
     const costPerSend   = provider === "erp" ? 2.86 : 0.013;
     return {
       provider,
