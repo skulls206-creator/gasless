@@ -109,27 +109,31 @@ A fully browser-side gasless USDT (TRC-20) wallet on the TRON network.
 
 ### Key Library Files
 - `src/lib/sponsor.ts` — Sponsor wallet: delegate energy, top-up TRX, stake, status
-- `src/lib/energyRent.ts` — On-demand energy rental (TronNRG + TronEnergyRent)
+- `src/lib/energyRent.ts` — On-demand energy rental (Feee.io + EnergyRentPro)
 - `src/routes/gasless.ts` — `/api/gasless-send` with 3-tier energy priority
 - `src/routes/tron.ts` — TronGrid proxy routes
 - `src/routes/push.ts` — Push notification routes + poller
 
 ### Energy Sponsorship (3-tier priority on each send)
-1. **On-demand rental** (TronNRG or TronEnergyRent) — `isRentalConfigured()` checks env
+1. **On-demand rental** (Feee.io or EnergyRentPro) — only active when `ENERGY_RENT_API_KEY` is set
 2. **Staked delegation** — sponsor's own frozen TRX pool (free if available)
 3. **TRX top-up fallback** — send 2 TRX to user so they can pay their own fee
 
 ### Energy Rental Providers
-**TronNRG** (`ENERGY_RENT_PROVIDER=tronnrg`, default — no API key needed):
-- Sponsor sends 4 TRX to `TFqUiCu1JwLHHnBNeaaVKH7Csm4aA3YhZx`
-- Signs `${txid}:${userAddress}` with sponsor key
-- POST to `https://api.tronnrg.com/delegate` → 65,000 energy delegated to user
-- Cost: 4 TRX per standard USDT send (16,250 energy/TRX)
+Rental is **only attempted** when `ENERGY_RENT_API_KEY` is set. Without it, tiers 2 and 3 handle sponsorship.
 
-**TronEnergyRent** (`ENERGY_RENT_PROVIDER=ter`, requires `ENERGY_RENT_API_KEY`):
-- GET `https://api.tronenergyrent.com/place-energy-order?...`
-- Simpler: single API call, pre-funded balance at TER
-- Cost: ~2.86 TRX per 65,000 energy (44 SUN/energy at 1h)
+**Feee.io** (`ENERGY_RENT_PROVIDER=feee`, default):
+- POST `https://feee.io/open/v3/order/create` (5-minute fixed rental, cheapest)
+- Auth: `key` header = `ENERGY_RENT_API_KEY`
+- Body: `{ resource_type: 1, receive_address, resource_value: 65000 }`
+- Balance: GET `https://feee.io/open/v2/api/query` → `data.trx_money`
+- Cost: ~0.013 TRX per 65,000-energy send (energy arrives in 3–6 s)
+
+**EnergyRentPro** (`ENERGY_RENT_PROVIDER=erp`, requires `ENERGY_RENT_API_KEY`):
+- GET `https://api.tronenergyrent.com/place-energy-order?apiKey=...&period=1h&energyAmount=...&destinationAddress=...`
+- Balance: GET `/get-balance?apiKey=...` → `payload.balanceTrx`
+- Cost: ~2.86 TRX per 65,000 energy (1-hour rental, 44 SUN/energy)
+- Duration controlled by `ENERGY_RENT_DURATION_HOURS` (default: `"1"`)
 
 ### Env Vars
 | Variable | Required | Description |
@@ -138,9 +142,9 @@ A fully browser-side gasless USDT (TRC-20) wallet on the TRON network.
 | `SPONSOR_ADDRESS` | Yes | Sponsor wallet base58 address |
 | `ADMIN_SECRET` | No | Protects `/api/admin/*` endpoints |
 | `TRONGRID_API_KEY` | No | TronGrid Pro API key (reduces 429s) |
-| `ENERGY_RENT_PROVIDER` | No | `"tronnrg"` (default) or `"ter"` |
-| `ENERGY_RENT_API_KEY` | If TER | TronEnergyRent API key |
-| `ENERGY_RENT_DURATION_HOURS` | No | Rental duration hours for TER (default: `"1"`) |
+| `ENERGY_RENT_API_KEY` | No | Activates rental tier; required for both `feee` and `erp` |
+| `ENERGY_RENT_PROVIDER` | No | `"feee"` (default) or `"erp"` |
+| `ENERGY_RENT_DURATION_HOURS` | No | Rental duration for `erp` provider (default: `"1"`) |
 | `FEE_RECIPIENT_ADDRESS` | No | Override fee recipient (defaults to SPONSOR_ADDRESS) |
 | `VAPID_PUBLIC_KEY` | No | Web Push VAPID public key |
 | `VAPID_PRIVATE_KEY` | No | Web Push VAPID private key |
