@@ -46,7 +46,21 @@ export function isSponsorConfigured(): boolean {
   return !!(process.env.SPONSOR_PRIVATE_KEY && process.env.SPONSOR_ADDRESS);
 }
 
-export async function getSponsorStatus() {
+export type SponsorStatus =
+  | { configured: false }
+  | { configured: true; address: string; error: string }
+  | {
+      configured: true;
+      address: string;
+      trxBalance: number;
+      energyLimit: number;
+      energyUsed: number;
+      availableEnergy: number;
+      availableBandwidth: number;
+      estimatedSendsRemaining: number;
+    };
+
+export async function getSponsorStatus(): Promise<SponsorStatus> {
   const tronWeb = getSponsorTronWeb();
   const address = getSponsorAddress();
 

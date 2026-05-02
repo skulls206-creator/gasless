@@ -7,6 +7,7 @@ import {
   topUpUserTRX,
   delegateEnergyToUser,
   broadcastSignedTx,
+  type SponsorStatus,
 } from "../lib/sponsor.js";
 import { isRentalConfigured, rentEnergyForUser, getRentalBalance } from "../lib/energyRent.js";
 
@@ -115,16 +116,21 @@ router.get("/sponsor-info", async (_req, res): Promise<void> => {
       isRentalConfigured() ? getRentalBalance() : Promise.resolve(null),
     ]);
 
+    // Narrow to the full status shape to read staked-energy fields
+    const fullStatus = "estimatedSendsRemaining" in status
+      ? (status as Extract<SponsorStatus, { estimatedSendsRemaining: number }>)
+      : null;
+
     // Staked energy sends (from own delegated pool)
-    const stakedSends = (status as any).estimatedSendsRemaining ?? 0;
+    const stakedSends    = fullStatus?.estimatedSendsRemaining ?? 0;
     // Rental capacity sends
-    const rentalSends = rental?.estimatedSendsRemaining ?? 0;
+    const rentalSends    = rental?.estimatedSendsRemaining ?? 0;
     const totalEstimated = stakedSends + rentalSends;
 
     // Sponsor is "active" if it has staked energy OR if rental is configured
     // (rental can source energy on-demand as long as the sponsor has TRX)
-    const hasStakedEnergy = ((status as any).availableEnergy ?? 0) > 0;
-    const rentalReady = isRentalConfigured() && (rental?.trxBalance ?? 0) > 0;
+    const hasStakedEnergy = (fullStatus?.availableEnergy ?? 0) > 0;
+    const rentalReady     = isRentalConfigured() && (rental?.trxBalance ?? 0) > 0;
     const active = hasStakedEnergy || rentalReady;
 
     res.json({
