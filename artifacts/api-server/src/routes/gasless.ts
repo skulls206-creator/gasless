@@ -256,7 +256,7 @@ router.get("/admin/status", requireAdmin, async (_req, res): Promise<void> => {
       getSponsorStatus(),
       getRentalBalance(),
     ]);
-    res.json({ ...status, rental: rental ?? undefined });
+    res.json({ ...status, rental: rental ?? null });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
