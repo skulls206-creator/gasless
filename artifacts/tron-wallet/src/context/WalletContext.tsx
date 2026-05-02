@@ -17,6 +17,7 @@ async function syncWalletToServer(accountNum: string, encryptedPk: string, addre
 
 interface WalletContextType {
   isLoggedIn: boolean;
+  sessionRestoring: boolean; // true while async session restore is in-flight
   address: string | null;
   accountNumber: string | null;
   privateKey: string | null; // in-memory only when logged in
@@ -30,14 +31,17 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn]       = useState(false);
-  const [address, setAddress]             = useState<string | null>(null);
-  const [accountNumber, setAccountNumber] = useState<string | null>(null);
-  const [privateKey, setPrivateKey]       = useState<string | null>(null);
-  const [hasWallet, setHasWallet]         = useState(false);
+  const [isLoggedIn, setIsLoggedIn]             = useState(false);
+  const [sessionRestoring, setSessionRestoring] = useState(true);
+  const [address, setAddress]                   = useState<string | null>(null);
+  const [accountNumber, setAccountNumber]       = useState<string | null>(null);
+  const [privateKey, setPrivateKey]             = useState<string | null>(null);
+  const [hasWallet, setHasWallet]               = useState(false);
 
   // Restore session from sessionStorage on mount so that in-tab navigations
   // (including ?to= query-param links) don't force re-login.
+  // sessionRestoring stays true until this completes so AuthGuard doesn't
+  // redirect prematurely based on isLoggedIn=false.
   useEffect(() => {
     const encryptedPk = localStorage.getItem("tron_wallet_encrypted_pk");
     const storedAddr  = localStorage.getItem("tron_wallet_address");
@@ -45,7 +49,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setHasWallet(true);
       const sessionAccNum = sessionStorage.getItem("tron_wallet_session_acct");
       if (sessionAccNum) {
-        // Silently re-derive the private key to restore the session
         decryptPrivateKey(encryptedPk, sessionAccNum).then((pk) => {
           if (pk && pk.length === 64) {
             setPrivateKey(pk);
@@ -55,9 +58,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           } else {
             sessionStorage.removeItem("tron_wallet_session_acct");
           }
+          setSessionRestoring(false);
         });
+        return; // wait for async decrypt to finish before clearing restoring flag
       }
     }
+    // No session to restore — immediately mark as done
+    setSessionRestoring(false);
   }, []);
 
   const login = async (accountNum: string): Promise<boolean> => {
@@ -134,7 +141,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <WalletContext.Provider
       value={{
-        isLoggedIn, address, accountNumber, privateKey,
+        isLoggedIn, sessionRestoring, address, accountNumber, privateKey,
         login, logout, createWallet, importWallet, hasWallet,
       }}
     >

@@ -37,18 +37,24 @@ function PayLinkWrapper() {
 }
 
 function AuthGuard() {
-  const { isLoggedIn, hasWallet } = useWallet();
+  const { isLoggedIn, sessionRestoring, hasWallet } = useWallet();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
+    // Don't redirect until async session restore has finished — otherwise we'd
+    // redirect to /login right before isLoggedIn flips to true.
+    if (sessionRestoring) return;
+
+    // Strip query string for route matching
+    const path = location.split("?")[0];
     const publicRoutes = ["/", "/login", "/create", "/import", "/recover"];
-    const isPayRoute = location.startsWith("/pay/");
+    const isPayRoute = path.startsWith("/pay/");
 
     if (!isLoggedIn) {
       if (isPayRoute) return; // Let PayLink handle itself
-      if (hasWallet && !["/login", "/create", "/import", "/recover"].includes(location)) {
+      if (hasWallet && !["/login", "/create", "/import", "/recover"].includes(path)) {
         setLocation("/login");
-      } else if (!hasWallet && !publicRoutes.includes(location)) {
+      } else if (!hasWallet && !publicRoutes.includes(path)) {
         setLocation("/");
       }
     } else {
@@ -59,11 +65,11 @@ function AuthGuard() {
         setLocation(`/send?to=${encodeURIComponent(payTo)}`);
         return;
       }
-      if (publicRoutes.includes(location) && !isPayRoute) {
+      if (publicRoutes.includes(path) && !isPayRoute) {
         setLocation("/dashboard");
       }
     }
-  }, [isLoggedIn, hasWallet, location, setLocation]);
+  }, [isLoggedIn, sessionRestoring, hasWallet, location, setLocation]);
 
   // Pay link is always accessible regardless of auth state
   if (location.startsWith("/pay/")) {
@@ -73,6 +79,10 @@ function AuthGuard() {
       </Switch>
     );
   }
+
+  // While session restore is in-flight, render nothing — prevents a flash of
+  // the login/welcome screen before isLoggedIn becomes true.
+  if (sessionRestoring) return null;
 
   if (!isLoggedIn) {
     return (
