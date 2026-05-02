@@ -8,21 +8,21 @@
  *
  * Supported providers (ENERGY_RENT_PROVIDER, default "feee"):
  *
- *   "feee"  — Feee.io V3 (5-minute rental, cheapest option).
- *             POST https://feee.io/open/v3/order/create
- *             Docs: https://feee.io/doc/en-US/api/
- *             Auth: `key` header = ENERGY_RENT_API_KEY
- *             Balance: GET /v2/api/query → data.trx_money
+ *   "feee"       — Feee.io V3 (5-minute rental, cheapest option).
+ *                  POST https://feee.io/open/v3/order/create
+ *                  Docs: https://feee.io/doc/en-US/api/
+ *                  Auth: `key` header = ENERGY_RENT_API_KEY
+ *                  Balance: GET /v2/api/query → data.trx_money
  *
- *   "erp"   — EnergyRentPro / TronEnergyRent.
- *             GET https://api.tronenergyrent.com/place-energy-order
- *             Auth: apiKey query param = ENERGY_RENT_API_KEY
- *             Balance: GET /get-balance?apiKey=...
+ *   "erp" / "ter" — EnergyRentPro / TronEnergyRent (backup provider).
+ *                   GET https://api.tronenergyrent.com/place-energy-order
+ *                   Auth: apiKey query param = ENERGY_RENT_API_KEY
+ *                   Balance: GET /get-balance?apiKey=...
  *
  * Additional env vars:
- *   ENERGY_RENT_PROVIDER        — "feee" | "erp"  (default: "feee")
+ *   ENERGY_RENT_PROVIDER        — "feee" | "erp" | "ter"  (default: "feee")
  *   ENERGY_RENT_API_KEY         — required to activate rental at all
- *   ENERGY_RENT_DURATION_HOURS  — rental duration for "erp" provider (default: "1")
+ *   ENERGY_RENT_DURATION_HOURS  — rental duration for "erp"/"ter" provider (default: "1")
  */
 
 const FEEE_BASE = "https://feee.io/open";
@@ -42,7 +42,7 @@ export interface RentalResult {
 
 function getProvider(): "feee" | "erp" {
   const p = (process.env.ENERGY_RENT_PROVIDER ?? "feee").toLowerCase();
-  return p === "erp" ? "erp" : "feee";
+  return p === "erp" || p === "ter" ? "erp" : "feee";
 }
 
 function getApiKey(): string {
