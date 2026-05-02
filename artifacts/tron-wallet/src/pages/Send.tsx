@@ -29,7 +29,7 @@ function useSponsorStatus() {
   return useQuery({
     queryKey: ["sponsor-status"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/status");
+      const res = await fetch("/api/sponsor-info");
       if (!res.ok) return { configured: false };
       return res.json();
     },
@@ -203,7 +203,7 @@ export function Send() {
   const numAmount = parseFloat(amount) || 0;
   const totalRequired = feesEnabled ? numAmount + feeAmount : numAmount;
   const userHasEnergy = resources?.isSufficientForTRC20;
-  const sponsorActive = sponsor?.configured && (sponsor?.availableEnergy ?? 0) > 0;
+  const sponsorActive = sponsor?.configured && sponsor?.active;
   const networkFeeIsFree = userHasEnergy || sponsorActive;
   const hasEnoughBalance = totalRequired > 0 && totalRequired <= (balance || 0);
   const isFormValid = isValidAddress && numAmount > 0 && hasEnoughBalance;

@@ -3,6 +3,35 @@ import { BrowserQRCodeReader, IScannerControls } from "@zxing/browser";
 import { X, Camera, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Extract a TRON base58 address from whatever a QR code contains.
+ * Handles: plain addresses, tron: URI scheme, and our own payment-link URLs
+ * (e.g. https://gasless.one/pay/Txxxxx or https://domain/tron-wallet/pay/Txxxxx).
+ */
+function extractTronAddress(raw: string): string {
+  const text = raw.trim();
+
+  // tron: URI scheme — tron:Txxxxxxx or tron:Txxxxxxx?amount=…
+  if (text.startsWith("tron:")) {
+    return text.replace(/^tron:/, "").split("?")[0].trim();
+  }
+
+  // Payment-link URL path: …/pay/Txxxxxxx (our own QR codes)
+  const payMatch = text.match(/\/pay\/(T[A-HJ-NP-Za-km-z1-9]{33,34})\b/);
+  if (payMatch) return payMatch[1];
+
+  // ?to=Txxxxxxx query param (send-page deep link)
+  try {
+    const url = new URL(text);
+    const to = url.searchParams.get("to");
+    if (to && to.startsWith("T")) return to;
+  } catch {
+    // not a URL — fall through
+  }
+
+  return text;
+}
+
 interface QRScannerProps {
   onScan: (value: string) => void;
   onClose: () => void;
@@ -38,11 +67,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
           (result, err) => {
             if (result && !cancelled) {
               const text = result.getText();
-              // Support plain address or tron: URI scheme
-              const address = text.startsWith("tron:")
-                ? text.replace(/^tron:/, "").split("?")[0]
-                : text.trim();
-              onScan(address);
+              onScan(extractTronAddress(text));
             }
             if (err && !(err instanceof Error && err.message.includes("No MultiFormat"))) {
               // Ignore "no QR found in frame" errors — they're normal

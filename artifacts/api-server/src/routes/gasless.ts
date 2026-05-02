@@ -8,6 +8,7 @@ import {
   delegateEnergyToUser,
   broadcastSignedTx,
 } from "../lib/sponsor.js";
+import { isRentalConfigured, rentEnergyForUser, getRentalBalance } from "../lib/energyRent.js";
 
 // USDT (TRC-20) contract address on TRON mainnet
 const USDT_CONTRACT_HEX = "a614f803b6fd780986a42c78ec9c7f77e6ded13c"; // without leading 41
@@ -96,6 +97,46 @@ function validateSignedTx(signedTx: any, userAddress: string): string | null {
 
 // ── Public endpoints ───────────────────────────────────────────────────────
 
+/**
+ * Minimal public endpoint — no sensitive data exposed.
+ * Returns whether sponsorship is active and an estimated sends-remaining count
+ * so the Send page can show the right UX without requiring admin auth.
+ */
+router.get("/sponsor-info", async (_req, res): Promise<void> => {
+  try {
+    const configured = isSponsorConfigured();
+    if (!configured) {
+      res.json({ configured: false, active: false });
+      return;
+    }
+
+    const [status, rental] = await Promise.all([
+      getSponsorStatus(),
+      isRentalConfigured() ? getRentalBalance() : Promise.resolve(null),
+    ]);
+
+    // Staked energy sends (from own delegated pool)
+    const stakedSends = (status as any).estimatedSendsRemaining ?? 0;
+    // Rental capacity sends
+    const rentalSends = rental?.estimatedSendsRemaining ?? 0;
+    const totalEstimated = stakedSends + rentalSends;
+
+    // Sponsor is "active" if it has staked energy OR if rental is configured
+    // (rental can source energy on-demand as long as the sponsor has TRX)
+    const hasStakedEnergy = ((status as any).availableEnergy ?? 0) > 0;
+    const rentalReady = isRentalConfigured() && (rental?.trxBalance ?? 0) > 0;
+    const active = hasStakedEnergy || rentalReady;
+
+    res.json({
+      configured: true,
+      active,
+      estimatedSendsRemaining: totalEstimated > 0 ? totalEstimated : null,
+    });
+  } catch {
+    res.json({ configured: false, active: false });
+  }
+});
+
 router.get("/config", (_req, res): void => {
   const feeRecipient = getFeeRecipient();
   res.json({
@@ -139,23 +180,42 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
   }
 
   const txCount = hasFee ? 2 : 1;
+  const energyNeeded = 65_000 * txCount;
 
   try {
     let sponsored = false;
 
     if (isSponsorConfigured()) {
-      // Prefer energy delegation (zero-cost if we have sufficient staked energy)
       let energyOk = false;
-      try {
-        await delegateEnergyToUser(userAddress, txCount);
-        energyOk = true;
-        sponsored = true;
-        console.log("[gasless] Energy delegation succeeded");
-      } catch (delegateErr: any) {
-        console.log(`[gasless] Energy delegation unavailable: ${delegateErr.message}`);
+
+      // Priority 1 — on-demand energy rental (external provider, scales without staking)
+      if (isRentalConfigured()) {
+        try {
+          const rental = await rentEnergyForUser(userAddress, energyNeeded);
+          console.log(
+            `[gasless] Energy rented via ${rental.provider}: ${rental.energyDelegated} energy` +
+            ` (cost: ${rental.costTrx} TRX${rental.ref ? ", ref: " + rental.ref : ""})`,
+          );
+          energyOk  = true;
+          sponsored = true;
+        } catch (rentErr: any) {
+          console.warn(`[gasless] Energy rental failed: ${rentErr.message} — trying staked delegation`);
+        }
       }
 
-      // Fall back to TRX top-up: sponsor sends enough TRX for the user to pay their own fee
+      // Priority 2 — delegate from sponsor's own staked energy pool (free if stake is available)
+      if (!energyOk) {
+        try {
+          await delegateEnergyToUser(userAddress, txCount);
+          energyOk  = true;
+          sponsored = true;
+          console.log("[gasless] Energy delegation from staked pool succeeded");
+        } catch (delegateErr: any) {
+          console.log(`[gasless] Staked delegation unavailable: ${delegateErr.message}`);
+        }
+      }
+
+      // Priority 3 — TRX top-up: send TRX so the user can cover the fee themselves
       if (!energyOk) {
         try {
           const topUp = await topUpUserTRX(userAddress);
@@ -192,8 +252,11 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
 
 router.get("/admin/status", requireAdmin, async (_req, res): Promise<void> => {
   try {
-    const status = await getSponsorStatus();
-    res.json(status);
+    const [status, rental] = await Promise.all([
+      getSponsorStatus(),
+      getRentalBalance(),
+    ]);
+    res.json({ ...status, rental: rental ?? undefined });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
