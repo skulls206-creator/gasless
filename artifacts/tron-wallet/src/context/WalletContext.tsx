@@ -36,10 +36,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [privateKey, setPrivateKey]       = useState<string | null>(null);
   const [hasWallet, setHasWallet]         = useState(false);
 
+  // Restore session from sessionStorage on mount so that in-tab navigations
+  // (including ?to= query-param links) don't force re-login.
   useEffect(() => {
-    const stored  = localStorage.getItem("tron_wallet_encrypted_pk");
-    const storedA = localStorage.getItem("tron_wallet_address");
-    if (stored && storedA) setHasWallet(true);
+    const encryptedPk = localStorage.getItem("tron_wallet_encrypted_pk");
+    const storedAddr  = localStorage.getItem("tron_wallet_address");
+    if (encryptedPk && storedAddr) {
+      setHasWallet(true);
+      const sessionAccNum = sessionStorage.getItem("tron_wallet_session_acct");
+      if (sessionAccNum) {
+        // Silently re-derive the private key to restore the session
+        decryptPrivateKey(encryptedPk, sessionAccNum).then((pk) => {
+          if (pk && pk.length === 64) {
+            setPrivateKey(pk);
+            setAccountNumber(sessionAccNum);
+            setAddress(storedAddr);
+            setIsLoggedIn(true);
+          } else {
+            sessionStorage.removeItem("tron_wallet_session_acct");
+          }
+        });
+      }
+    }
   }, []);
 
   const login = async (accountNum: string): Promise<boolean> => {
@@ -50,6 +68,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const decryptedPk = await decryptPrivateKey(stored, accountNum);
     if (!decryptedPk || decryptedPk.length !== 64) return false;
 
+    sessionStorage.setItem("tron_wallet_session_acct", accountNum);
     setPrivateKey(decryptedPk);
     setAccountNumber(accountNum);
     setAddress(storedA);
@@ -58,6 +77,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    sessionStorage.removeItem("tron_wallet_session_acct");
     setPrivateKey(null);
     setAccountNumber(null);
     setAddress(null);
@@ -73,6 +93,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const encrypted = await encryptPrivateKey(newPk, accountNum);
     localStorage.setItem("tron_wallet_encrypted_pk", encrypted);
     localStorage.setItem("tron_wallet_address", newAddress);
+    sessionStorage.setItem("tron_wallet_session_acct", accountNum);
 
     setPrivateKey(newPk);
     setAccountNumber(accountNum);
@@ -94,6 +115,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const encrypted = await encryptPrivateKey(importedPk, accountNum);
       localStorage.setItem("tron_wallet_encrypted_pk", encrypted);
       localStorage.setItem("tron_wallet_address", newAddress);
+      sessionStorage.setItem("tron_wallet_session_acct", accountNum);
 
       setPrivateKey(importedPk);
       setAccountNumber(accountNum);
