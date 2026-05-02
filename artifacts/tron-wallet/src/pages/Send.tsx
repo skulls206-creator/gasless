@@ -38,11 +38,28 @@ function useSponsorStatus() {
   });
 }
 
+function useTrxPrice() {
+  return useQuery({
+    queryKey: ["trx-price"],
+    queryFn: async () => {
+      const res = await fetch("/api/trx-price");
+      if (!res.ok) return null;
+      const data = await res.json();
+      return typeof data.usd === "number" ? data.usd : null;
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 const PENDING_LABELS = [
   "Preparing transaction…",
   "Sponsoring energy…",
   "Broadcasting…",
 ];
+
+const TRX_FEE_MIN = 1;
+const TRX_FEE_MAX = 3;
 
 export function Send() {
   const { address, privateKey } = useWallet();
@@ -52,6 +69,7 @@ export function Send() {
   const { data: resources } = useTronResources(address);
   const { data: sponsor } = useSponsorStatus();
   const { data: config } = useAppConfig();
+  const { data: trxPriceUsd } = useTrxPrice();
   const sendMutation = useSendUSDT();
 
   const feeAmount = config?.feeAmount ?? 1;
@@ -310,8 +328,10 @@ export function Send() {
                           <Info className="w-3.5 h-3.5" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[220px] text-center text-xs leading-relaxed">
-                        This $1 covers network energy for other users — it keeps Gasless free for everyone.
+                      <TooltipContent side="top" className="max-w-[240px] text-center text-xs leading-relaxed">
+                        {trxPriceUsd != null
+                          ? `Sending USDT on TRON costs ~${(TRX_FEE_MAX * trxPriceUsd).toFixed(2)} USDT in network energy. This $${feeAmount.toFixed(0)} fee lets Gasless cover that cost for you — no TRX required.`
+                          : `Sending USDT on TRON requires network energy. This $${feeAmount.toFixed(0)} fee lets Gasless cover that cost for you — no TRX required.`}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -333,7 +353,10 @@ export function Send() {
                 </span>
               ) : (
                 <span className="text-sm font-bold text-primary flex items-center gap-1">
-                  <AlertTriangle className="w-4 h-4" /> ~1–3 TRX
+                  <AlertTriangle className="w-4 h-4" />
+                  {trxPriceUsd != null
+                    ? `~${TRX_FEE_MIN}–${TRX_FEE_MAX} TRX (~$${(TRX_FEE_MIN * trxPriceUsd).toFixed(2)}–$${(TRX_FEE_MAX * trxPriceUsd).toFixed(2)})`
+                    : `~${TRX_FEE_MIN}–${TRX_FEE_MAX} TRX`}
                 </span>
               )}
             </div>
@@ -356,7 +379,9 @@ export function Send() {
               {sponsorActive && !userHasEnergy ? (
                 <span className="flex items-center gap-1 text-primary/70">
                   <Zap className="w-3 h-3 flex-shrink-0" />
-                  Gasless sponsors the network fee — no TRX needed.
+                  {trxPriceUsd != null
+                    ? `Gasless covers ~${(TRX_FEE_MAX * trxPriceUsd).toFixed(2)} USDT in network costs for you — no TRX needed.`
+                    : "Gasless sponsors the network fee — no TRX needed."}
                   {sponsor?.estimatedSendsRemaining != null &&
                     ` (~${sponsor.estimatedSendsRemaining} sponsored sends remaining)`}
                 </span>

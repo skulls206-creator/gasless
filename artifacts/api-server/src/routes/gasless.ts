@@ -143,6 +143,44 @@ router.get("/sponsor-info", async (_req, res): Promise<void> => {
   }
 });
 
+/**
+ * Proxy TRX/USD price from CoinGecko (free tier, no API key required).
+ * Cached for 60 s to avoid hammering the public endpoint.
+ */
+let trxPriceCache: { usd: number; fetchedAt: number } | null = null;
+const TRX_PRICE_TTL_MS = 60_000;
+
+router.get("/trx-price", async (_req, res): Promise<void> => {
+  try {
+    const now = Date.now();
+    if (trxPriceCache && now - trxPriceCache.fetchedAt < TRX_PRICE_TTL_MS) {
+      res.json({ usd: trxPriceCache.usd });
+      return;
+    }
+
+    const response = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=tron&vs_currencies=usd",
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5_000) },
+    );
+
+    if (!response.ok) throw new Error(`CoinGecko HTTP ${response.status}`);
+    const data = await response.json() as { tron?: { usd?: number } };
+    const usd = data?.tron?.usd;
+    if (typeof usd !== "number" || usd <= 0) throw new Error("Invalid price response");
+
+    trxPriceCache = { usd, fetchedAt: now };
+    res.json({ usd });
+  } catch (err: any) {
+    console.warn("[trx-price] fetch failed:", err.message);
+    // Fall back to cache if available, even if stale
+    if (trxPriceCache) {
+      res.json({ usd: trxPriceCache.usd, stale: true });
+      return;
+    }
+    res.status(503).json({ error: "TRX price unavailable" });
+  }
+});
+
 router.get("/config", (_req, res): void => {
   const feeRecipient = getFeeRecipient();
   res.json({
