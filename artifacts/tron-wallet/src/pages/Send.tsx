@@ -56,6 +56,7 @@ const PENDING_LABELS = [
   "Preparing transaction…",
   "Sponsoring energy…",
   "Broadcasting…",
+  "Confirming on-chain…",
 ];
 
 const TRX_FEE_MIN = 1;
@@ -84,6 +85,7 @@ export function Send() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [wasSponsored, setWasSponsored] = useState(false);
   const [pendingStep, setPendingStep] = useState(0);
+  const [failure, setFailure] = useState<{ message: string; txid?: string; unconfirmed?: boolean } | null>(null);
 
   // Pre-fill address from payment link query param
   useEffect(() => {
@@ -108,7 +110,8 @@ export function Send() {
     }
     const t1 = setTimeout(() => setPendingStep(1), 1_500);
     const t2 = setTimeout(() => setPendingStep(2), 7_500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const t3 = setTimeout(() => setPendingStep(3), 12_000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [sendMutation.isPending]);
 
   const isEthAddress = toAddress.startsWith("0x") && toAddress.length >= 10;
@@ -150,6 +153,7 @@ export function Send() {
       return;
     }
 
+    setFailure(null);
     sendMutation.mutate(
       {
         privateKey,
@@ -166,6 +170,12 @@ export function Send() {
           toast({ title: "Transaction Sent!" });
         },
         onError: (err: any) => {
+          // Server attaches txid when broadcast succeeded but on-chain
+          // execution reverted (e.g. OUT_OF_ENERGY). Show full failure page.
+          if (err?.txid) {
+            setFailure({ message: err.message, txid: err.txid, unconfirmed: !!err.unconfirmed });
+            return;
+          }
           toast({
             variant: "destructive",
             title: "Transaction Failed",
@@ -175,6 +185,51 @@ export function Send() {
       },
     );
   };
+
+  if (failure) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center space-y-6">
+        <div className="w-20 h-20 bg-destructive/20 rounded-full flex items-center justify-center mb-4">
+          <AlertTriangle className="w-10 h-10 text-destructive" />
+        </div>
+        <h2 className="text-3xl font-display font-bold">
+          {failure.unconfirmed ? "Transfer Pending" : "Transfer Failed"}
+        </h2>
+        <p className="text-muted-foreground max-w-sm">{failure.message}</p>
+
+        {!failure.unconfirmed && (
+          <p className="text-xs text-muted-foreground/70 max-w-sm">
+            Your USDT was not sent and the $1 service fee was not charged.
+            Please try again — Gasless will request more energy this time.
+          </p>
+        )}
+
+        {failure.txid && (
+          <div className="bg-secondary p-4 rounded-xl border border-white/5 break-all w-full text-xs font-mono text-muted-foreground mt-2">
+            {failure.txid}
+          </div>
+        )}
+
+        <div className="flex gap-4 w-full mt-4">
+          {failure.txid && (
+            <a
+              href={`https://tronscan.org/#/transaction/${failure.txid}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1"
+            >
+              <Button variant="outline" className="w-full">
+                View on Tronscan <ExternalLink className="w-4 h-4 ml-2" />
+              </Button>
+            </a>
+          )}
+          <Button className="flex-1" onClick={() => setFailure(null)}>
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (txHash) {
     return (

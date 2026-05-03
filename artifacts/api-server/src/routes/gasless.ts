@@ -7,6 +7,8 @@ import {
   topUpUserTRX,
   delegateEnergyToUser,
   broadcastSignedTx,
+  confirmTxSuccess,
+  getUserAvailableEnergy,
   type SponsorStatus,
 } from "../lib/sponsor.js";
 import { isRentalConfigured, rentEnergyForUser, getRentalBalance } from "../lib/energyRent.js";
@@ -224,7 +226,9 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
   }
 
   const txCount = hasFee ? 2 : 1;
-  const energyNeeded = 65_000 * txCount;
+  // Per-tx budget: 130k covers USDT transfer + SSTORE penalty (TIP-491) for
+  // first-time recipients with TronWeb's safety headroom.
+  const energyNeeded = 130_000 * txCount;
 
   try {
     let sponsored = false;
@@ -237,11 +241,24 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
         try {
           const rental = await rentEnergyForUser(userAddress, energyNeeded);
           console.log(
-            `[gasless] Energy rented via ${rental.provider}: ${rental.energyDelegated} energy` +
+            `[gasless] Energy rented via ${rental.provider}: ${rental.energyDelegated} energy claimed` +
             ` (cost: ${rental.costTrx} TRX${rental.ref ? ", ref: " + rental.ref : ""})`,
           );
-          energyOk  = true;
-          sponsored = true;
+
+          // Verify the energy actually arrived on-chain. Providers sometimes
+          // deliver less than ordered (or with delay). Without this check, an
+          // under-delivered rental would still cause OUT_OF_ENERGY revert.
+          const delivered = await getUserAvailableEnergy(userAddress);
+          if (delivered >= energyNeeded) {
+            console.log(`[gasless] Rental delivery verified: ${delivered} energy available on-chain`);
+            energyOk  = true;
+            sponsored = true;
+          } else {
+            console.warn(
+              `[gasless] Rental under-delivered: only ${delivered} of ${energyNeeded} energy ` +
+              `available on-chain — falling back to staked delegation`,
+            );
+          }
         } catch (rentErr: any) {
           console.warn(`[gasless] Energy rental failed: ${rentErr.message} — trying staked delegation`);
         }
@@ -274,7 +291,27 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
     }
 
     const { txid } = await broadcastSignedTx(signedTx);
+    console.log(`[gasless] Broadcasted main tx: ${txid} — waiting for on-chain confirmation`);
 
+    // Verify the contract executed successfully BEFORE charging the service
+    // fee. Without this, an OUT_OF_ENERGY revert would still get billed and
+    // the user would see a false "Sent" screen.
+    try {
+      const receipt = await confirmTxSuccess(txid);
+      console.log(`[gasless] Tx ${txid} confirmed (energy: ${receipt.energyUsed}, net: ${receipt.netUsed})`);
+    } catch (confirmErr: any) {
+      // Surface the failure with the txid so the UI can link to Tronscan
+      console.error(`[gasless] Tx ${txid} did NOT succeed: ${confirmErr.message}`);
+      res.status(502).json({
+        error: confirmErr.message || "Transaction reverted on-chain",
+        txid,
+        unconfirmed: !!confirmErr.unconfirmed,
+        sponsored,
+      });
+      return;
+    }
+
+    // Main tx succeeded — now broadcast the $1 service fee transfer.
     let feeTxid: string | undefined;
     if (hasFee) {
       try {

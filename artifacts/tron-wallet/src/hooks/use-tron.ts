@@ -133,7 +133,15 @@ export function useSendUSDT() {
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Transaction failed");
+      if (!res.ok) {
+        // 502 from /gasless-send means broadcast succeeded but the contract
+        // reverted on-chain. Preserve the txid so the UI can link to Tronscan
+        // and explain what happened.
+        const err: any = new Error(json.error || "Transaction failed");
+        if (json.txid) err.txid = json.txid;
+        if (json.unconfirmed) err.unconfirmed = true;
+        throw err;
+      }
       return json as GaslessSendResult;
     },
     onSuccess: (_result, variables) => {

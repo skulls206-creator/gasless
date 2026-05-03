@@ -22,7 +22,8 @@ async function withRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> {
   throw lastErr;
 }
 
-const MIN_ENERGY_FOR_USDT = 65_000;
+// Matches energyRent.ts — USDT transfer + SSTORE penalty + headroom.
+const MIN_ENERGY_FOR_USDT = 130_000;
 const TRX_TOPUP_AMOUNT_SUN = 2_000_000;   // 2 TRX sent to user
 const TRX_TOPUP_THRESHOLD_SUN = 1_000_000; // top-up if user < 1 TRX
 const TRX_SPONSOR_RESERVE_SUN = 5_000_000; // always keep 5 TRX in sponsor wallet
@@ -213,6 +214,19 @@ function decodeTronError(result: any): string {
   return msg ? `${code}: ${msg}` : (code || JSON.stringify(result));
 }
 
+/**
+ * Returns the user's currently-available energy (limit minus used, including
+ * delegated energy). Used to verify that an energy rental actually delivered
+ * before broadcasting a transaction that depends on it.
+ */
+export async function getUserAvailableEnergy(userAddress: string): Promise<number> {
+  const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
+  const resources = await withRetry(() => tronWeb.trx.getAccountResources(userAddress));
+  const limit = ((resources as any).EnergyLimit ?? 0) as number;
+  const used  = ((resources as any).EnergyUsed  ?? 0) as number;
+  return Math.max(0, limit - used);
+}
+
 export async function broadcastSignedTx(signedTx: object): Promise<{ txid: string }> {
   const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
   const result  = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
@@ -226,4 +240,93 @@ export async function broadcastSignedTx(signedTx: object): Promise<{ txid: strin
     throw new Error(`Broadcast rejected by network — ${errMsg}`);
   }
   return { txid: (result as any).txid };
+}
+
+/**
+ * Wait for a transaction's on-chain receipt and verify the contract executed
+ * successfully. Without this check we'd report success even when the contract
+ * reverted (e.g. OUT_OF_ENERGY) — the broadcast accepts the tx but execution
+ * fails on-chain.
+ *
+ * Polls getTransactionInfo for up to ~timeoutMs. Returns once receipt.result
+ * is set. Throws if the contract reverted.
+ */
+export async function confirmTxSuccess(
+  txid: string,
+  timeoutMs = 18_000,
+): Promise<{ ok: true; energyUsed: number; netUsed: number }> {
+  const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
+  const start   = Date.now();
+  const pollMs  = 1_500;
+
+  while (Date.now() - start < timeoutMs) {
+    let info: any = null;
+    try {
+      info = await tronWeb.trx.getTransactionInfo(txid);
+    } catch {
+      // Network blip — keep polling
+    }
+
+    // Empty object = not yet indexed by TronGrid — keep polling
+    if (info && info.id) {
+      const receipt: any   = info.receipt ?? {};
+      const energyUsed     = (receipt.energy_usage_total ?? receipt.energy_usage ?? 0) as number;
+      const netUsed        = (receipt.net_usage ?? 0) as number;
+      // receipt.result is "SUCCESS" / "OUT_OF_ENERGY" / "REVERT" / "OUT_OF_TIME" / etc.
+      // info.result === "FAILED" is set when execution failed.
+      const receiptResult: string | undefined = receipt.result;
+      const txResult: string | undefined      = info.result;
+
+      // Explicit failure — surface immediately
+      if (txResult === "FAILED" || (receiptResult && receiptResult !== "SUCCESS")) {
+        const reason = decodeContractRevertMessage(info) || receiptResult || "unknown";
+        const err: any = new Error(`Transaction reverted on-chain: ${reason}`);
+        err.txid = txid;
+        err.receipt = receipt;
+        throw err;
+      }
+
+      // Explicit success — only return when we have a finalized SUCCESS marker.
+      // If receipt.result is missing/empty, keep polling — the tx is indexed
+      // but execution status hasn't propagated yet.
+      if (receiptResult === "SUCCESS") {
+        return { ok: true, energyUsed, netUsed };
+      }
+      // else fall through and poll again
+    }
+
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+
+  // Timed out waiting for indexer — don't claim failure, but flag as unconfirmed
+  const err: any = new Error("Transaction not confirmed within 18s — check Tronscan for status");
+  err.txid = txid;
+  err.unconfirmed = true;
+  throw err;
+}
+
+/** Extract a human-readable revert reason from a getTransactionInfo response. */
+function decodeContractRevertMessage(info: any): string | null {
+  // Standard Solidity revert string lives in contractResult[0] as ABI-encoded bytes
+  const cr: string | undefined = info?.contractResult?.[0];
+  if (!cr) {
+    // Fall back to resMessage from older nodes
+    const rm: string | undefined = info?.resMessage;
+    if (rm) {
+      try {
+        return Buffer.from(rm, "hex").toString("utf8").replace(/\x00/g, "").trim() || null;
+      } catch { return null; }
+    }
+    return null;
+  }
+  try {
+    // ABI revert: 0x08c379a0 + offset(32) + length(32) + string
+    if (cr.startsWith("08c379a0")) {
+      const lenHex = cr.slice(8 + 64, 8 + 128);
+      const len    = parseInt(lenHex, 16);
+      const strHex = cr.slice(8 + 128, 8 + 128 + len * 2);
+      return Buffer.from(strHex, "hex").toString("utf8");
+    }
+  } catch { /* ignore */ }
+  return null;
 }
