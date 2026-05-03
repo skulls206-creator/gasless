@@ -24,8 +24,14 @@ async function withRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> {
 
 // Matches energyRent.ts — USDT transfer + SSTORE penalty + headroom.
 const MIN_ENERGY_FOR_USDT = 130_000;
-const TRX_TOPUP_AMOUNT_SUN = 2_000_000;   // 2 TRX sent to user
-const TRX_TOPUP_THRESHOLD_SUN = 1_000_000; // top-up if user < 1 TRX
+// A USDT TRC-20 transfer to a non-zero recipient burns ~27–30k energy at
+// ~100 SUN/energy = ~2.7–3.0 TRX, plus ~0.3 TRX bandwidth. TRON also
+// applies an *escalating energy penalty* after repeated OUT_OF_ENERGY
+// failures from the same address (observed +7k → +17k → +26k), so worst
+// case is ~56k energy = ~5.6 TRX burn. We send 8 TRX to comfortably
+// cover the worst case; unused TRX stays in the user wallet.
+const TRX_TOPUP_AMOUNT_SUN = 8_000_000;   // 8 TRX sent to user
+const TRX_TOPUP_THRESHOLD_SUN = 7_000_000; // top-up unless user already has ≥7 TRX
 const TRX_SPONSOR_RESERVE_SUN = 5_000_000; // always keep 5 TRX in sponsor wallet
 
 function normalizePk(pk: string): string {
