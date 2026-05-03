@@ -5,6 +5,7 @@ import {
   getSponsorStatus,
   stakeTRXForEnergy,
   topUpUserTRX,
+  ensureUserHasBandwidthTRX,
   delegateEnergyToUser,
   broadcastSignedTx,
   confirmTxSuccess,
@@ -287,6 +288,22 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
         } catch (topUpErr: any) {
           console.warn(`[gasless] TRX top-up skipped: ${topUpErr.message}`);
         }
+      }
+    }
+
+    // Ensure user has enough TRX to cover the *bandwidth* burn for the
+    // smart-contract broadcast itself. TRON rejects TRC-20 broadcasts with
+    // BANDWITH_ERROR if the wallet has 0 TRX, even when bandwidth is
+    // technically available and energy is fully covered.
+    if (isSponsorConfigured()) {
+      try {
+        const bw = await ensureUserHasBandwidthTRX(userAddress);
+        if (bw.topped) {
+          console.log(`[gasless] Bandwidth top-up: ${bw.amountTRX} TRX → ${userAddress} (tx: ${bw.txid})`);
+          sponsored = true;
+        }
+      } catch (bwErr: any) {
+        console.warn(`[gasless] Bandwidth top-up skipped: ${bwErr.message}`);
       }
     }
 

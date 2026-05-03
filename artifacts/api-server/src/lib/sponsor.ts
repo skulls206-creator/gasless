@@ -34,6 +34,14 @@ const TRX_TOPUP_AMOUNT_SUN = 8_000_000;   // 8 TRX sent to user
 const TRX_TOPUP_THRESHOLD_SUN = 7_000_000; // top-up unless user already has ≥7 TRX
 const TRX_SPONSOR_RESERVE_SUN = 5_000_000; // always keep 5 TRX in sponsor wallet
 
+// Even when energy is rented/delegated, TRON requires the user wallet to
+// have actual TRX in order to broadcast a smart-contract tx — the network
+// burns ~0.345 TRX of bandwidth for a TRC-20 transfer (~345 bytes × 1000
+// SUN/byte). With 0 TRX the broadcast is rejected with BANDWITH_ERROR
+// even though energy is fine. Keep a small float to cover this.
+const TRX_BANDWIDTH_FLOOR_SUN  = 1_500_000; // top up if user has <1.5 TRX
+const TRX_BANDWIDTH_TOPUP_SUN  = 2_000_000; // send 2 TRX (covers ~5 TRC-20 broadcasts)
+
 function normalizePk(pk: string): string {
   return pk.startsWith("0x") || pk.startsWith("0X") ? pk.slice(2) : pk;
 }
@@ -171,6 +179,57 @@ export async function topUpUserTRX(
   return { topped: true, amountTRX: TRX_TOPUP_AMOUNT_SUN / 1e6, txid };
 }
 
+/**
+ * Ensure the user wallet has at least TRX_BANDWIDTH_FLOOR_SUN so the
+ * smart-contract broadcast doesn't fail with BANDWITH_ERROR. Required even
+ * when energy is rented, because TRON validates that the wallet can
+ * actually pay the bandwidth burn before accepting the tx.
+ */
+export async function ensureUserHasBandwidthTRX(
+  userAddress: string,
+): Promise<{ topped: boolean; amountTRX?: number; txid?: string }> {
+  const tronWeb        = getSponsorTronWeb();
+  const sponsorAddress = getSponsorAddress();
+  if (!tronWeb || !sponsorAddress) throw new Error("Sponsor wallet not configured");
+
+  const userAccount    = await withRetry(() => tronWeb.trx.getAccount(userAddress));
+  const userBalanceSun: number = (userAccount as any).balance ?? 0;
+
+  if (userBalanceSun >= TRX_BANDWIDTH_FLOOR_SUN) {
+    return { topped: false };
+  }
+
+  const sponsorAccount = await withRetry(() => tronWeb.trx.getAccount(sponsorAddress));
+  const sponsorBalanceSun: number = (sponsorAccount as any).balance ?? 0;
+
+  if (sponsorBalanceSun < TRX_BANDWIDTH_TOPUP_SUN + TRX_SPONSOR_RESERVE_SUN) {
+    throw new Error(
+      `Sponsor TRX low (${(sponsorBalanceSun / 1e6).toFixed(2)} TRX). ` +
+      "Cannot fund bandwidth top-up — please refill the sponsor wallet.",
+    );
+  }
+
+  console.log(
+    `[sponsor] Bandwidth top-up: sending ${TRX_BANDWIDTH_TOPUP_SUN / 1e6} TRX to ${userAddress} ` +
+    `(had ${(userBalanceSun / 1e6).toFixed(4)} TRX)`,
+  );
+
+  const tx       = await withRetry(() => tronWeb.transactionBuilder.sendTrx(userAddress, TRX_BANDWIDTH_TOPUP_SUN, sponsorAddress));
+  const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
+  const signedTx = await tronWeb.trx.sign(tx, pk);
+  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
+
+  if ((result as any).result !== true) {
+    throw new Error(`Bandwidth top-up failed — ${decodeTronError(result)}`);
+  }
+
+  const txid = (result as any).txid as string;
+  console.log(`[sponsor] Bandwidth top-up tx: ${txid} — waiting 3 s for confirmation…`);
+  await new Promise((r) => setTimeout(r, 3_000));
+
+  return { topped: true, amountTRX: TRX_BANDWIDTH_TOPUP_SUN / 1e6, txid };
+}
+
 /** Legacy energy delegation — still used if sponsor has high energy staked. */
 export async function delegateEnergyToUser(userAddress: string, txCount = 1): Promise<void> {
   const tronWeb        = getSponsorTronWeb();
@@ -259,7 +318,7 @@ export async function broadcastSignedTx(signedTx: object): Promise<{ txid: strin
  */
 export async function confirmTxSuccess(
   txid: string,
-  timeoutMs = 18_000,
+  timeoutMs = 60_000,
 ): Promise<{ ok: true; energyUsed: number; netUsed: number }> {
   const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
   const start   = Date.now();
@@ -305,7 +364,7 @@ export async function confirmTxSuccess(
   }
 
   // Timed out waiting for indexer — don't claim failure, but flag as unconfirmed
-  const err: any = new Error("Transaction not confirmed within 18s — check Tronscan for status");
+  const err: any = new Error(`Transaction not confirmed within ${Math.round(timeoutMs / 1000)}s — check Tronscan for status`);
   err.txid = txid;
   err.unconfirmed = true;
   throw err;
