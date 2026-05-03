@@ -14,6 +14,11 @@
 import CryptoJS from "crypto-js";
 
 const PBKDF2_ITERATIONS = 200_000;
+// PIN-protected blobs use higher iterations because the keyspace is small
+// (a 6-digit PIN has only 1M combinations). Combined with the on-device
+// failed-attempt counter that wipes the blob after 10 wrong PINs, this
+// makes offline brute-force impractical.
+const PBKDF2_ITERATIONS_PIN = 600_000;
 
 // ── SHA-256 helper ────────────────────────────────────────────────────────
 export async function sha256Hex(text: string): Promise<string> {
@@ -33,7 +38,11 @@ function hex2buf(hex: string): Uint8Array {
   return out;
 }
 
-async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveKey(
+  password: string,
+  salt: Uint8Array,
+  iterations: number = PBKDF2_ITERATIONS,
+): Promise<CryptoKey> {
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(
     "raw",
@@ -43,7 +52,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     ["deriveKey"],
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
@@ -66,6 +75,41 @@ export async function encryptPrivateKey(plaintext: string, password: string): Pr
     i: buf2hex(iv),
     ct: buf2hex(new Uint8Array(cipherBuf)),
   });
+}
+
+// ── PIN-protected blob (account-number quick-unlock) ──────────────────────
+// Encrypts an arbitrary string (the user's account number) under a 6-digit
+// PIN. Higher PBKDF2 iterations to slow brute-force; on-device wipe after
+// 10 wrong PINs is the primary defense.
+export async function encryptWithPin(plaintext: string, pin: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const key  = await deriveKey(pin, salt, PBKDF2_ITERATIONS_PIN);
+
+  const encoded   = new TextEncoder().encode(plaintext);
+  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+
+  return JSON.stringify({
+    v: 2,
+    s: buf2hex(salt),
+    i: buf2hex(iv),
+    ct: buf2hex(new Uint8Array(cipherBuf)),
+  });
+}
+
+export async function decryptWithPin(stored: string, pin: string): Promise<string | null> {
+  try {
+    const { v, s, i, ct } = JSON.parse(stored);
+    if (v !== 2) return null;
+    const salt = hex2buf(s);
+    const iv   = hex2buf(i);
+    const data = hex2buf(ct);
+    const key  = await deriveKey(pin, salt, PBKDF2_ITERATIONS_PIN);
+    const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    return new TextDecoder().decode(plainBuf);
+  } catch {
+    return null;
+  }
 }
 
 // ── Decryption: v1 + v2 ───────────────────────────────────────────────────

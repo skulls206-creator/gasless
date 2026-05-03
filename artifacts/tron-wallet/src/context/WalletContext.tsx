@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { getTronWeb } from "@/lib/tron";
-import { sha256Hex, encryptPrivateKey, decryptPrivateKey } from "@/lib/crypto";
+import {
+  sha256Hex,
+  encryptPrivateKey,
+  decryptPrivateKey,
+  encryptWithPin,
+  decryptWithPin,
+} from "@/lib/crypto";
+
+const PIN_BLOB_KEY      = "tron_wallet_pin_blob";
+const PIN_ATTEMPTS_KEY  = "tron_wallet_pin_attempts";
+const PIN_MAX_ATTEMPTS  = 10;
 
 async function syncWalletToServer(accountNum: string, encryptedPk: string, address: string) {
   try {
@@ -26,6 +36,11 @@ interface WalletContextType {
   createWallet: (accountNum: string) => Promise<{ address: string; privateKey: string }>;
   importWallet: (privateKey: string, accountNum: string) => Promise<boolean>;
   hasWallet: boolean;
+  // PIN quick-unlock
+  hasPin: boolean;
+  setupPin: (pin: string) => Promise<boolean>;
+  unlockWithPin: (pin: string) => Promise<{ ok: boolean; attemptsRemaining?: number; wiped?: boolean }>;
+  removePin: () => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -37,12 +52,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [accountNumber, setAccountNumber]       = useState<string | null>(null);
   const [privateKey, setPrivateKey]             = useState<string | null>(null);
   const [hasWallet, setHasWallet]               = useState(false);
+  const [hasPin, setHasPin]                     = useState(false);
 
   // Restore session from sessionStorage on mount so that in-tab navigations
   // (including ?to= query-param links) don't force re-login.
   // sessionRestoring stays true until this completes so AuthGuard doesn't
   // redirect prematurely based on isLoggedIn=false.
   useEffect(() => {
+    setHasPin(!!localStorage.getItem(PIN_BLOB_KEY));
     const encryptedPk = localStorage.getItem("tron_wallet_encrypted_pk");
     const storedAddr  = localStorage.getItem("tron_wallet_address");
     if (encryptedPk && storedAddr) {
@@ -138,11 +155,54 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ── PIN quick-unlock ──────────────────────────────────────────────────
+  const setupPin = async (pin: string): Promise<boolean> => {
+    if (!accountNumber) return false;
+    if (!/^\d{6}$/.test(pin)) return false;
+    const blob = await encryptWithPin(accountNumber, pin);
+    localStorage.setItem(PIN_BLOB_KEY, blob);
+    localStorage.removeItem(PIN_ATTEMPTS_KEY);
+    setHasPin(true);
+    return true;
+  };
+
+  const unlockWithPin = async (pin: string): Promise<{ ok: boolean; attemptsRemaining?: number; wiped?: boolean }> => {
+    const blob = localStorage.getItem(PIN_BLOB_KEY);
+    if (!blob) return { ok: false };
+
+    const recoveredAcct = await decryptWithPin(blob, pin);
+    if (!recoveredAcct) {
+      const attempts = parseInt(localStorage.getItem(PIN_ATTEMPTS_KEY) ?? "0", 10) + 1;
+      if (attempts >= PIN_MAX_ATTEMPTS) {
+        // Wipe PIN — too many wrong attempts. Wallet is still recoverable
+        // via the 20-digit account number.
+        localStorage.removeItem(PIN_BLOB_KEY);
+        localStorage.removeItem(PIN_ATTEMPTS_KEY);
+        setHasPin(false);
+        return { ok: false, wiped: true };
+      }
+      localStorage.setItem(PIN_ATTEMPTS_KEY, String(attempts));
+      return { ok: false, attemptsRemaining: PIN_MAX_ATTEMPTS - attempts };
+    }
+
+    // PIN correct — chain into the regular account-number unlock
+    localStorage.removeItem(PIN_ATTEMPTS_KEY);
+    const success = await login(recoveredAcct);
+    return { ok: success };
+  };
+
+  const removePin = () => {
+    localStorage.removeItem(PIN_BLOB_KEY);
+    localStorage.removeItem(PIN_ATTEMPTS_KEY);
+    setHasPin(false);
+  };
+
   return (
     <WalletContext.Provider
       value={{
         isLoggedIn, sessionRestoring, address, accountNumber, privateKey,
         login, logout, createWallet, importWallet, hasWallet,
+        hasPin, setupPin, unlockWithPin, removePin,
       }}
     >
       {children}

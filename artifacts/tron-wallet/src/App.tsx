@@ -19,6 +19,7 @@ import { History } from "@/pages/History";
 import { Pay } from "@/pages/Pay";
 import { Backup } from "@/pages/Backup";
 import { PayLink } from "@/pages/PayLink";
+import { SetupPin } from "@/pages/SetupPin";
 import { useEffect } from "react";
 import { KhurkOSBanner } from "@/components/ui/KhurkOSBanner";
 
@@ -106,6 +107,7 @@ function AuthGuard() {
         <Route path="/history" component={History} />
         <Route path="/pay" component={Pay} />
         <Route path="/backup" component={Backup} />
+        <Route path="/setup-pin" component={SetupPin} />
         <Route component={Dashboard} />
       </Switch>
     </AppLayout>

@@ -3,19 +3,28 @@ import { Link } from "wouter";
 import { useWallet } from "@/context/WalletContext";
 import { useUSDTBalance, useTronResources } from "@/hooks/use-tron";
 import { formatAddress, formatCurrency } from "@/lib/utils";
-import { Copy, ArrowUpRight, ArrowDownToLine, Zap, Battery, AlertTriangle } from "lucide-react";
+import { Copy, ArrowUpRight, ArrowDownToLine, Zap, Battery, AlertTriangle, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { GaslessModal } from "@/components/ui/GaslessModal";
 
 export function Dashboard() {
-  const { address } = useWallet();
+  const { address, hasPin } = useWallet();
   const { toast } = useToast();
-  
+
   const { data: balance, isLoading: isLoadingBalance } = useUSDTBalance(address);
   const { data: resources, isLoading: isLoadingResources } = useTronResources(address);
-  
+
   const [showEduModal, setShowEduModal] = useState(false);
+  const [pinPromptDismissed, setPinPromptDismissed] = useState(
+    () => localStorage.getItem("tron_wallet_pin_prompt_dismissed") === "1",
+  );
+
+  const dismissPinPrompt = () => {
+    localStorage.setItem("tron_wallet_pin_prompt_dismissed", "1");
+    setPinPromptDismissed(true);
+  };
+  const showPinPrompt = !hasPin && !pinPromptDismissed;
 
   const handleCopy = () => {
     if (address) {
@@ -28,6 +37,36 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {showPinPrompt && (
+        <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Set up a 6-digit PIN</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Quick-unlock without typing your full 20-digit account number.
+            </p>
+            <div className="flex gap-2 mt-3">
+              <Link href="/setup-pin">
+                <Button size="sm" className="h-8 text-xs">Set up PIN</Button>
+              </Link>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 text-xs text-muted-foreground"
+                onClick={dismissPinPrompt}
+              >
+                Not now
+              </Button>
+            </div>
+          </div>
+          <button onClick={dismissPinPrompt} className="text-muted-foreground/60 hover:text-foreground p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Bar: Address */}
       <div className="flex justify-between items-center bg-secondary/50 rounded-full py-2 px-4 border border-white/5 backdrop-blur-md">
         <div className="flex items-center gap-2">
