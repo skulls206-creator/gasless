@@ -39,7 +39,7 @@ export class SponsorTxError extends Error {
 }
 
 /** Narrow an `unknown` caught value to a string message. */
-function errMessage(err: unknown): string {
+export function errMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "string") return err;
   try { return JSON.stringify(err); } catch { return String(err); }

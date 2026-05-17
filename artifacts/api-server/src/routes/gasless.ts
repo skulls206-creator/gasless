@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { TronWeb } from "tronweb";
 import {
   isSponsorConfigured,
@@ -9,6 +9,7 @@ import {
   broadcastSignedTx,
   confirmTxSuccess,
   SponsorTxError,
+  errMessage,
   getUserAvailableEnergy,
   getEnergyFeeSun,
   MIN_ENERGY_FOR_USDT,
@@ -30,7 +31,7 @@ function getFeeRecipient(): string | null {
 
 const router: IRouter = Router();
 
-function requireAdmin(req: any, res: any, next: any) {
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) return next(); // No secret set → open (dev/initial setup mode)
   const provided = req.headers["x-admin-secret"] || req.query.secret;
@@ -48,7 +49,22 @@ function requireAdmin(req: any, res: any, next: any) {
  *
  * Returns null if valid, or an error string if invalid.
  */
-function validateSignedTx(signedTx: any, userAddress: string): string | null {
+interface SignedTxContractParameterValue {
+  contract_address?: string;
+  owner_address?: string;
+  [k: string]: unknown;
+}
+interface SignedTxContract {
+  type?: string;
+  parameter?: { value?: SignedTxContractParameterValue };
+}
+interface SignedTxShape {
+  raw_data?: { contract?: SignedTxContract[] };
+  signature?: unknown;
+  [k: string]: unknown;
+}
+
+function validateSignedTx(signedTx: SignedTxShape, userAddress: string): string | null {
   try {
     const contracts = signedTx?.raw_data?.contract;
     if (!Array.isArray(contracts) || contracts.length === 0) {
@@ -99,8 +115,8 @@ function validateSignedTx(signedTx: any, userAddress: string): string | null {
     }
 
     return null; // all good
-  } catch (err: any) {
-    return `Validation error: ${err?.message ?? String(err)}`;
+  } catch (err: unknown) {
+    return `Validation error: ${errMessage(err)}`;
   }
 }
 
@@ -178,8 +194,8 @@ router.get("/trx-price", async (_req, res): Promise<void> => {
 
     trxPriceCache = { usd, fetchedAt: now };
     res.json({ usd });
-  } catch (err: any) {
-    console.warn("[trx-price] fetch failed:", err.message);
+  } catch (err: unknown) {
+    console.warn("[trx-price] fetch failed:", errMessage(err));
     // Fall back to cache if available, even if stale
     if (trxPriceCache) {
       res.json({ usd: trxPriceCache.usd, stale: true });
@@ -263,8 +279,8 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
               `available on-chain — falling back to staked delegation`,
             );
           }
-        } catch (rentErr: any) {
-          console.warn(`[gasless] Energy rental failed: ${rentErr.message} — trying staked delegation`);
+        } catch (rentErr: unknown) {
+          console.warn(`[gasless] Energy rental failed: ${errMessage(rentErr)} — trying staked delegation`);
         }
       }
 
@@ -275,8 +291,8 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
           energyOk  = true;
           sponsored = true;
           console.log("[gasless] Energy delegation from staked pool succeeded");
-        } catch (delegateErr: any) {
-          console.log(`[gasless] Staked delegation unavailable: ${delegateErr.message}`);
+        } catch (delegateErr: unknown) {
+          console.log(`[gasless] Staked delegation unavailable: ${errMessage(delegateErr)}`);
         }
       }
 
@@ -364,8 +380,8 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
                 `[gasless] Fee tx ${pendingFeeTxid} confirmed ` +
                 `(energy: ${feeReceipt.energyUsed}, net: ${feeReceipt.netUsed})`,
               );
-            } catch (confirmErr: any) {
-              feeError = confirmErr.message ?? "Fee tx did not confirm on-chain";
+            } catch (confirmErr: unknown) {
+              feeError = errMessage(confirmErr) || "Fee tx did not confirm on-chain";
               console.error(
                 `[gasless] Fee tx ${pendingFeeTxid} broadcast but did NOT confirm: ${feeError}`,
               );
@@ -378,21 +394,21 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
           try {
             await confirmTxSuccess(pendingFeeTxid);
             feeTxid = pendingFeeTxid;
-          } catch (confirmErr: any) {
-            feeError = confirmErr.message ?? "Fee tx did not confirm on-chain";
+          } catch (confirmErr: unknown) {
+            feeError = errMessage(confirmErr) || "Fee tx did not confirm on-chain";
             console.error(`[gasless] Fee tx ${pendingFeeTxid} did not confirm: ${feeError}`);
           }
         }
-      } catch (feeErr: any) {
-        feeError = feeErr.message ?? "Fee broadcast failed";
+      } catch (feeErr: unknown) {
+        feeError = errMessage(feeErr) || "Fee broadcast failed";
         console.error(`[gasless] Fee broadcast failed: ${feeError}`);
       }
     }
 
     res.json({ txid, feeTxid, feeError, sponsored });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[gasless-send] error:", err);
-    res.status(500).json({ error: err.message || "Transaction failed" });
+    res.status(500).json({ error: errMessage(err) || "Transaction failed" });
   }
 });
 
@@ -448,8 +464,8 @@ router.get("/admin/status", requireAdmin, async (_req, res): Promise<void> => {
     };
 
     res.json({ ...status, rental: rental ?? null, energyReadiness });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    res.status(500).json({ error: errMessage(err) });
   }
 });
 
@@ -465,8 +481,8 @@ router.post("/admin/stake", requireAdmin, async (req, res): Promise<void> => {
   try {
     const result = await stakeTRXForEnergy(amount);
     res.json({ success: true, ...result });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    res.status(500).json({ error: errMessage(err) });
   }
 });
 
