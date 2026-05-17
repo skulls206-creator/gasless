@@ -76,7 +76,9 @@ export function usePushNotifications(address: string | null) {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        // Cast Uint8Array → BufferSource: TS 5.7 requires ArrayBufferView<ArrayBuffer>,
+        // but Uint8Array's generic is ArrayBufferLike. Runtime is fine.
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
       });
 
       await fetch(apiUrl("/api/push/subscribe"), {

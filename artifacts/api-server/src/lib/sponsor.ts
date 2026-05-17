@@ -358,8 +358,12 @@ export async function delegateEnergyToUser(userAddress: string, txCount = 1): Pr
     delegateSun, userAddress, "ENERGY", sponsorAddress, false,
   ));
   const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
-  const signedTx = await tronWeb.trx.sign(tx, pk);
-  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
+  // TronWeb's typings for transactionBuilder.delegateResource / trx.sign /
+  // trx.sendRawTransaction are too narrow (they expect SignedTransaction<ContractParamter>
+  // but the builder returns an `unknown` / loosely-typed object). Cast at the call
+  // boundary — runtime shape is correct.
+  const signedTx = await tronWeb.trx.sign(tx as any, pk);
+  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx as any));
 
   if ((result as any).result !== true) throw new Error(`Delegation failed — ${decodeTronError(result)}`);
   console.log(`[sponsor] Delegation tx: ${(result as any).txid} — waiting 6 s…`);
@@ -392,7 +396,9 @@ export async function getUserAvailableEnergy(userAddress: string): Promise<numbe
 
 export async function broadcastSignedTx(signedTx: object): Promise<{ txid: string }> {
   const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
-  const result  = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
+  // TronWeb's sendRawTransaction expects SignedTransaction<ContractParamter>, but
+  // we accept any pre-signed tx object from the caller. Runtime shape is correct.
+  const result  = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx as any));
 
   // TronGrid returns { result: true, txid } on success,
   // or { result: false, code: "TAPOS_ERROR", message: "<hex>" } on failure.

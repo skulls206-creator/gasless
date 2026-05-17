@@ -52,7 +52,10 @@ async function deriveKey(
     ["deriveKey"],
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+    // Cast salt to BufferSource: TS 5.7 narrowed BufferSource to require
+    // ArrayBufferView<ArrayBuffer>, but Uint8Array's generic is ArrayBufferLike.
+    // Runtime is fine — every typed array we construct is backed by ArrayBuffer.
+    { name: "PBKDF2", salt: salt as BufferSource, iterations, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
@@ -67,7 +70,11 @@ export async function encryptPrivateKey(plaintext: string, password: string): Pr
   const key  = await deriveKey(password, salt);
 
   const encoded   = new TextEncoder().encode(plaintext);
-  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const cipherBuf = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv as BufferSource },
+    key,
+    encoded as BufferSource,
+  );
 
   return JSON.stringify({
     v: 2,
@@ -87,7 +94,11 @@ export async function encryptWithPin(plaintext: string, pin: string): Promise<st
   const key  = await deriveKey(pin, salt, PBKDF2_ITERATIONS_PIN);
 
   const encoded   = new TextEncoder().encode(plaintext);
-  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const cipherBuf = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv as BufferSource },
+    key,
+    encoded as BufferSource,
+  );
 
   return JSON.stringify({
     v: 2,
@@ -105,7 +116,11 @@ export async function decryptWithPin(stored: string, pin: string): Promise<strin
     const iv   = hex2buf(i);
     const data = hex2buf(ct);
     const key  = await deriveKey(pin, salt, PBKDF2_ITERATIONS_PIN);
-    const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    const plainBuf = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv as BufferSource },
+      key,
+      data as BufferSource,
+    );
     return new TextDecoder().decode(plainBuf);
   } catch {
     return null;
@@ -125,7 +140,11 @@ export async function decryptPrivateKey(stored: string, password: string): Promi
       const data = hex2buf(ct);
       const key  = await deriveKey(password, salt);
 
-      const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+      const plainBuf = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: iv as BufferSource },
+        key,
+        data as BufferSource,
+      );
       return new TextDecoder().decode(plainBuf);
     } else {
       // v1 legacy: CryptoJS EVP_BytesToKey / MD5
