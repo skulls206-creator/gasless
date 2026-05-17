@@ -87,6 +87,21 @@ the same code.
 8. **All admin endpoints require `x-admin-secret` header matching
    `ADMIN_SECRET`** env. New admin routes MUST use the existing
    `requireAdmin` middleware.
+9. **HTTP 503 from `/api/gasless-send` uses a stable user-facing
+   string.** When `ensureUserReadyForSend()` returns `ok:false`, the
+   route MUST respond with
+   `{ error: "Sponsor wallet underfunded — please try again later",
+   reason, retryable: true, sponsored, diagnostics }`. The detailed
+   cause goes in `reason` / `diagnostics` for logs and admin
+   dashboards; the `error` string is stable so client toasts can
+   render a predictable message. Do not change this string without
+   updating both the Send page copy and this rule.
+10. **Never report `feeTxid` until `confirmTxSuccess()` passes.** The
+    fee tx must be broadcast, then confirmed on-chain, before its
+    txid is returned to the client. If confirmation fails, set
+    `feeError` and leave `feeTxid: null` so the UI shows "fee
+    skipped". A prior bug reported success while the $1 USDT never
+    landed in the sponsor wallet — do not regress this.
 
 ## Code style
 
@@ -110,6 +125,29 @@ the same code.
 - Error responses: `{ error: string, ...optional fields }`. Use
   appropriate status codes (400 user, 403 auth, 429 rate, 502 chain
   failure, 503 unrecoverable resource).
+
+## Admin readiness payload
+
+`GET /api/admin/status` (auth: `x-admin-secret`) returns the
+sponsor status plus an `energyReadiness` object with this exact
+shape — do not rename or remove fields without updating any
+external dashboards:
+
+```ts
+energyReadiness: {
+  rentalOk: boolean;              // rental provider has TRX float
+  stakedDelegationOk: boolean;    // sponsor's own staked pool covers ≥1 send
+  trxFloatSendsRemaining: number; // worst-case sends if rental+stake both fail
+  energyFeeSun: number;           // live chain energy unit price (cached 5min)
+  perSendTopUpTRX: number | null; // worst-case per-send TRX top-up
+}
+```
+
+`trxFloatSendsRemaining` is computed as `floor((trxBalance·1e6 −
+TRX_SPONSOR_RESERVE_SUN) / perSendSun)` where `perSendSun =
+MIN_ENERGY_FOR_USDT × energyFeeSun + BANDWIDTH_BURN_PER_TX_SUN +
+READINESS_SAFETY_PAD_SUN`. All constants come from
+`lib/sponsor.ts`.
 
 ## Sponsor health surface
 
