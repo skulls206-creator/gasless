@@ -84,20 +84,27 @@ string ("Sponsor wallet underfunded — please try again later") with
 the detailed reason in `diagnostics` so client toasts can render a
 predictable message while logs/admin keep the full cause.
 
-## 2026-05-17 — Multi-agent collaboration infra  (sha: 45af4b7)
-**Replit Agent.** Stood up the cross-agent build. Added GitHub Pages
-workflow (`.github/workflows/deploy-pages.yml`) that builds the wallet
-with `VITE_API_BASE_URL` baked in from repo variable
-`GASLESS_API_BASE_URL`. Added `CNAME` for `gasless.khurk.xyz`. Added
-`/api/version` endpoint and Vite `__BUILD_ID__` injection so every
-build is tagged with its git short SHA. CORS on the API now accepts
-`ALLOWED_ORIGINS` (comma-separated allowlist, fail-closed in
-production). All frontend fetches routed through `apiUrl()` helper in
-`src/lib/api.ts`. Authored `AGENTS.md` and this file.
+## 2026-05-17 — Follow-up: wire readiness guard into gasless route  (sha: 45af4b7)
+**Replit Agent.** Small follow-up to `de7f3df`. Touched
+`lib/sponsor.ts` (8 lines) and `routes/gasless.ts` (97 lines) to
+finish wiring `ensureUserReadyForSend()` into the send + fee-tx flow
+and clean up the readiness call sites. No new infrastructure here —
+the heavy lifting was the prior commit.
 
-## 2026-05-17 — Task #9: resource guarantee before every broadcast  (sha: 45af4b7)
-**Replit Agent.** Replaced the old `topUpUserTRX` + `ensureUserHasBandwidthTRX`
-pair with a single `ensureUserReadyForSend(userAddress, txCount)` that
+## 2026-05-17 — Task #9 + multi-agent collab infra  (sha: de7f3df)
+**Replit Agent.** Single commit that ships two scopes: (a) the
+resource-readiness rewrite for Task #9 (see paragraph below), and
+(b) the cross-agent build infrastructure. Infra additions: GitHub
+Pages workflow (`.github/workflows/deploy-pages.yml`) that builds
+the wallet with `VITE_API_BASE_URL` baked in from repo variable
+`GASLESS_API_BASE_URL`; `CNAME` for `gasless.khurk.xyz`;
+`/api/version` endpoint and Vite `__BUILD_ID__` injection so every
+build is tagged with its git short SHA; CORS on the API accepts
+`ALLOWED_ORIGINS` (comma-separated allowlist, fail-closed in
+production); all frontend fetches routed through `apiUrl()` helper in
+`src/lib/api.ts`; authored `AGENTS.md` and `CHANGES.md`.
+
+Task #9 — resource guarantee before every broadcast:
 (a) reads the live chain energy unit price via `getChainParameters()`
 with a 5-minute cache and 210 SUN fallback, (b) computes the exact TRX
 gap = `energyGap × energyFee + bandwidthBurn + safetyPad`, (c) sends
