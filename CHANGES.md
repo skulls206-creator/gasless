@@ -121,14 +121,26 @@ instead of duplicating. Admin status (`/api/admin/status`) gains an
 `energyReadiness` block with `energyFeeSun`, `perSendTopUpTRX`, and
 `trxFloatSendsRemaining`.
 
-## 2026-05-17 — Tasks #14 & #15: rolled into adjacent typing work  (sha: 68e754d, 4df95d4)
-**Replit Agent.** Tasks #14 (broadcast-result typing) and #15
-(account / resource response typing) had no dedicated commits — the
-work was absorbed into Task #13 (`68e754d`, typed TronWeb wrapper
-`lib/tronweb-types.ts` covering `Account`, `AccountResourceMessage`,
-`ChainParameter`, `BroadcastReturn`) and Task #16 (`4df95d4`, typed
-`TransactionInfo` + `decodeContractRevertMessage`). No separate
-merge; recorded here for traceability.
+## 2026-05-17 — Task #15: typed Account / AccountResourceMessage  (sha: 68e754d)
+**Replit Agent.** Task #15 (account + resource response typing) had
+no dedicated commit — the work was absorbed into Task #13's typed
+TronWeb wrapper (`lib/tronweb-types.ts`), which exposes `Account`
+and `AccountResourceMessage` from `TronWeb`'s own `Types.*` and
+funnels every `getAccount` / `getAccountResources` call through
+those types. Removes the last `any` reads on `account.balance`,
+`resources.EnergyLimit`, etc. Recorded here for traceability.
+
+## 2026-05-17 — Task #14: typed BroadcastReturn / ChainParameter  (sha: 68e754d)
+**Replit Agent.** Task #14 (broadcast-result and chain-parameter
+typing) had no dedicated commit — the work was also absorbed into
+Task #13's typed wrapper. `broadcast()` returns
+`BroadcastReturn<SignedTransaction<T>>`; `getChainParameters()`
+returns `ChainParameter[]`. `decodeTronError()` and
+`getEnergyFeeSun()` consume those typed shapes directly instead of
+inspecting `any`. The escape hatch `broadcastUnknown()` is the only
+place left where the contract shape is erased — strictly at the
+`broadcastSignedTx(signedTx: object)` boundary. Recorded here for
+traceability.
 
 ## 2026-05-17 — Backend published to Replit Deployments  (sha: 6b4e2df)
 **Replit Agent.** Published the api-server. The api-server now has a
