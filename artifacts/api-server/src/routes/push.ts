@@ -10,7 +10,7 @@ const router: IRouter = Router();
 
 const VAPID_PUBLIC_KEY  = process.env["VAPID_PUBLIC_KEY"]  ?? "";
 const VAPID_PRIVATE_KEY = process.env["VAPID_PRIVATE_KEY"] ?? "";
-const VAPID_EMAIL       = process.env["VAPID_EMAIL"]       ?? "mailto:admin@gasless.one";
+const VAPID_EMAIL       = process.env["VAPID_EMAIL"]       ?? "mailto:admin@gasless.khurk.xyz";
 const TRONGRID_API_URL  = "https://api.trongrid.io";
 const USDT_CONTRACT     = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 

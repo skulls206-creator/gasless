@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 /**
  * Extract a TRON base58 address from whatever a QR code contains.
  * Handles: plain addresses, tron: URI scheme, and our own payment-link URLs
- * (e.g. https://gasless.one/pay/Txxxxx or https://domain/tron-wallet/pay/Txxxxx).
+ * (e.g. https://gasless.khurk.xyz/pay/Txxxxx or https://domain/tron-wallet/pay/Txxxxx).
  */
 function extractTronAddress(raw: string): string {
   const text = raw.trim();

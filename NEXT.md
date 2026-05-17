@@ -57,7 +57,7 @@ for cached reads, no public rate-limit exposure, single place to swap providers.
   "Waiting for confirmation…". Pure UX, no behavior change.
 
 ### B4. Receive page: shareable pay link
-- New button: "Share payment link". Copies `https://gasless.one/pay/<ADDRESS>`
+- New button: "Share payment link". Copies `https://gasless.khurk.xyz/pay/<ADDRESS>`
   to clipboard, toast on success.
 - The on-page QR code encodes the full URL (not the raw address) so any
   scanner that opens URLs lands on B5.

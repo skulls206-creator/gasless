@@ -18,7 +18,7 @@ already routed through backend, useUSDTTransactions/useTronResources/load-more
 already wired, QRScanner.tsx exists with camera/error handling/address extraction
 (B2), Send page wired to QR scanner and ?to= pre-fill (B3), PayLink.tsx public
 route exists (B5), dashboard copy already says 1–3 TRX (C1). Only missing item:
-getPaymentLink() now uses explicit https://gasless.one/pay/ URL (B4).
+getPaymentLink() now uses explicit https://gasless.khurk.xyz/pay/ URL (B4).
 
 ## 2026-05-17 — Swap page with SwapKit+Trocador, nav reorg  (sha: pending)
 **Satoshi.** Collapsed Send/Receive to remove from nav (routes still accessible).
