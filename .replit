@@ -35,3 +35,4 @@ VAPID_PUBLIC_KEY = "BBDIKtbl4-jA5VyBlmpV8cijy_DIt-J772h0faFpYdlKBSVcUXMRI317puzc
 VAPID_PRIVATE_KEY = "HlLB2C5A_S0GoEEak9jh1AKkWdIuOYVJ7gbTw9chL44"
 VAPID_EMAIL = "mailto:admin@gasless.one"
 ENERGY_RENT_PROVIDER = "erp"
+ALLOWED_ORIGINS = "https://gasless.khurk.xyz"
