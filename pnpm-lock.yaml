@@ -318,6 +318,12 @@ importers:
 
   artifacts/tron-wallet:
     dependencies:
+      '@swapkit/api':
+        specifier: ^2.9.8
+        version: 2.9.8
+      '@swapkit/helpers':
+        specifier: ^4.13.10
+        version: 4.13.10(ethers@6.13.5)(ts-pattern@5.9.0)(zod@3.25.76)(zustand@5.0.13(@types/react@19.2.14)(react@19.1.0)(use-sync-external-store@1.6.0(react@19.1.0)))
       '@zkp2p/sdk':
         specifier: 0.1.0-rc.14
         version: 0.1.0-rc.14(react@19.1.0)(typescript@5.9.3)(viem@2.47.2(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76)
@@ -336,12 +342,18 @@ importers:
       tronweb:
         specifier: ^6.2.2
         version: 6.2.2
+      ts-pattern:
+        specifier: 5.9.0
+        version: 5.9.0
       viem:
         specifier: ^2.47.2
         version: 2.47.2(typescript@5.9.3)(zod@3.25.76)
       vite-plugin-pwa:
         specifier: ^1.2.0
         version: 1.2.0(@types/babel__core@7.20.5)(vite@7.3.1(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2))
+      zustand:
+        specifier: 5.0.13
+        version: 5.0.13(@types/react@19.2.14)(react@19.1.0)(use-sync-external-store@1.6.0(react@19.1.0))
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
@@ -2613,6 +2625,38 @@ packages:
   '@surma/rollup-plugin-off-main-thread@2.2.3':
     resolution: {integrity: sha512-lR8q/9W7hZpMWweNiAKU7NQerBnzQQLvi8qnTDU/fxItPhtZVMbPV3lbCwjhIlNBe9Bbr5V+KHshvWmVSG9cxQ==}
 
+  '@swapkit/api@2.9.8':
+    resolution: {integrity: sha512-dvBm+1xKnJzXZQ+1AcFGpWFmEw8qLVWU4vNsXiIngY3dkhmWNuLCVaY4PgQSftZxJmsxlz13zGLcgEA1EDwgYg==}
+
+  '@swapkit/contracts@1.2.3':
+    resolution: {integrity: sha512-7M9t7Jyglq2WQXdvBnNcl2jUUQuU1qoOrFiEN3C93kvCIEJgnvxYxgITtfOITNiQfmQ014XF0CgozE5j29SZiQ==}
+
+  '@swapkit/contracts@4.1.4':
+    resolution: {integrity: sha512-a8r4hIIehELEVgnaYs4vr1ldHwwnkUbaEXvnpsLHiyWrGIDS/KMs4NsiTKaylnjVblzXMM2CMce0jpwgzb4WRA==}
+
+  '@swapkit/helpers@2.10.7':
+    resolution: {integrity: sha512-Zf2Jq1wTGIYLvWkaasX1Ai0DafXodVSlh45QFz2OaUoqf4x4KcWp9ipZAkLYAQ1ei2QB262iHSEBR9n7bBAOyw==}
+
+  '@swapkit/helpers@4.13.10':
+    resolution: {integrity: sha512-OJgwWa6pvvB+q09d5qQyJk+m+OGGQlk+cK0DvIuqGOSuIXu7lKt9muBXSq/RhBxdqUWBuf4JXtRZoNBGlouBlA==}
+    peerDependencies:
+      '@near-js/providers': 2.5.1
+      ethers: 6.16.0
+      ts-pattern: 5.9.0
+      zod: 4.4.3
+      zustand: 5.0.13
+
+  '@swapkit/tokens@2.7.1':
+    resolution: {integrity: sha512-CGtkSfRIhN4IlZXRdjGMlKVrQ4zi//MoqBsO/F/H+oztd2b4O7JVTjgTqaV345Y3fTl4wZ+5tojYGZ1wXD2w+Q==}
+
+  '@swapkit/tokens@4.2.8':
+    resolution: {integrity: sha512-aiNStKXguUgDXU4tUx2Yj6L+xVaDNwge4ugi86uFBimZ7JvZlscOpnWL0GaO6JaSxoyHBh1EcLK1yY4JXxrELA==}
+    peerDependencies:
+      ts-pattern: 5.9.0
+
+  '@swapkit/types@0.7.5':
+    resolution: {integrity: sha512-i3pN8XpVfMbtGfQldz1qBPKnU8qqcdhJdj2fxV25OoU0czY4TD4mtfPrIeDDyJhHAF6n4YPZFxBg49NnvrOAYg==}
+
   '@tabby_ai/hijri-converter@1.0.5':
     resolution: {integrity: sha512-r5bClKrcIusDoo049dSL8CawnHR6mRdDwhlQuIgZRNty68q0x8k3Lf1BtPAMxRf/GgnHBnIO4ujd3+GQdLWzxQ==}
     engines: {node: '>=16.0.0'}
@@ -4761,6 +4805,9 @@ packages:
     resolution: {integrity: sha512-5OX1tzOjxWEgsr/YEUWSuPrQ00deKLh6D7OTWcvNHm12/7QPyRh8SYpyWvA4IZv8H/+GQWQEh/kwo95Q9OVW1A==}
     engines: {node: '>=14.0.0'}
 
+  ts-pattern@5.9.0:
+    resolution: {integrity: sha512-6s5V71mX8qBUmlgbrfL33xDUwO0fq48rxAu2LBE11WBeGdpCPOsXksQbZJHvHwhrd3QjUusd3mAOM5Gg0mFBLg==}
+
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
@@ -5128,11 +5175,32 @@ packages:
     resolution: {integrity: sha512-CzhO+pFNo8ajLM2d2IW/R93ipy99LWjtwblvC1RsoSUMZgyLbYFr221TnSNT7GjGdYui6P459mw9JH/g/zW2ug==}
     engines: {node: '>=18'}
 
+  zod@3.24.1:
+    resolution: {integrity: sha512-muH7gBL9sI1nciMZV67X5fTKKBLtwpZ5VBp1vsOQzj1MhrBZ4wlVCm3gedKZWLp0Oyel8sIGfeiz54Su+OVT+A==}
+
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zod@4.3.6:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
+  zustand@5.0.13:
+    resolution: {integrity: sha512-efI2tVaVQPqtOh114loML/Z80Y4NP3yc+Ff0fYiZJPauNeWZeIp/bRFD7I9bfmCOYBh/PHxlglQ9+wvlwnPikQ==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
 
 snapshots:
 
@@ -7177,6 +7245,45 @@ snapshots:
       json5: 2.2.3
       magic-string: 0.25.9
       string.prototype.matchall: 4.0.12
+
+  '@swapkit/api@2.9.8':
+    dependencies:
+      '@swapkit/helpers': 2.10.7
+      zod: 3.24.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@swapkit/contracts@1.2.3': {}
+
+  '@swapkit/contracts@4.1.4': {}
+
+  '@swapkit/helpers@2.10.7':
+    dependencies:
+      '@swapkit/contracts': 1.2.3
+      '@swapkit/tokens': 2.7.1
+      ethers: 6.13.5
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@swapkit/helpers@4.13.10(ethers@6.13.5)(ts-pattern@5.9.0)(zod@3.25.76)(zustand@5.0.13(@types/react@19.2.14)(react@19.1.0)(use-sync-external-store@1.6.0(react@19.1.0)))':
+    dependencies:
+      '@swapkit/contracts': 4.1.4
+      '@swapkit/tokens': 4.2.8(ts-pattern@5.9.0)
+      '@swapkit/types': 0.7.5
+      ethers: 6.13.5
+      ts-pattern: 5.9.0
+      zod: 3.25.76
+      zustand: 5.0.13(@types/react@19.2.14)(react@19.1.0)(use-sync-external-store@1.6.0(react@19.1.0))
+
+  '@swapkit/tokens@2.7.1': {}
+
+  '@swapkit/tokens@4.2.8(ts-pattern@5.9.0)':
+    dependencies:
+      ts-pattern: 5.9.0
+
+  '@swapkit/types@0.7.5': {}
 
   '@tabby_ai/hijri-converter@1.0.5': {}
 
@@ -9434,6 +9541,8 @@ snapshots:
 
   ts-custom-error@3.3.1: {}
 
+  ts-pattern@5.9.0: {}
+
   tsconfck@3.1.6(typescript@5.9.3):
     optionalDependencies:
       typescript: 5.9.3
@@ -9851,6 +9960,14 @@ snapshots:
 
   yoctocolors@2.1.2: {}
 
+  zod@3.24.1: {}
+
   zod@3.25.76: {}
 
   zod@4.3.6: {}
+
+  zustand@5.0.13(@types/react@19.2.14)(react@19.1.0)(use-sync-external-store@1.6.0(react@19.1.0)):
+    optionalDependencies:
+      '@types/react': 19.2.14
+      react: 19.1.0
+      use-sync-external-store: 1.6.0(react@19.1.0)
