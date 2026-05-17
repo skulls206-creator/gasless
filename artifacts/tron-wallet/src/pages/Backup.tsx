@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ShieldAlert, Key, Copy, Eye, EyeOff, Bell, BellOff, BellRing, Loader2, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAccountNumberInput } from "@/lib/utils";
-import { apiUrl } from "@/lib/api";
+import { apiUrl, BUILD_ID } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -267,6 +267,13 @@ export function Backup() {
           </div>
         </div>
       )}
+
+      {/* Build identity — visible on this page for bug reports */}
+      <div className="text-center pt-6 pb-2">
+        <span className="text-[10px] text-muted-foreground/40 font-mono select-text">
+          build {BUILD_ID}
+        </span>
+      </div>
 
       {/* ── Admin Alerts ──────────────────────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-3xl overflow-hidden">
