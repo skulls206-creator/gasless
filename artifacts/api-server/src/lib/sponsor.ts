@@ -17,6 +17,34 @@ import {
 
 const TRONGRID = "https://api.trongrid.io";
 
+/**
+ * Error type for sponsor broadcast / confirm failures. Carries the txid plus
+ * optional structured fields so HTTP handlers can surface them to clients
+ * without resorting to `any` field-mutation on a plain Error.
+ */
+export class SponsorTxError extends Error {
+  readonly txid: string;
+  readonly receipt?: TransactionInfo["receipt"];
+  readonly unconfirmed: boolean;
+  constructor(
+    message: string,
+    opts: { txid: string; receipt?: TransactionInfo["receipt"]; unconfirmed?: boolean },
+  ) {
+    super(message);
+    this.name = "SponsorTxError";
+    this.txid = opts.txid;
+    this.receipt = opts.receipt;
+    this.unconfirmed = opts.unconfirmed ?? false;
+  }
+}
+
+/** Narrow an `unknown` caught value to a string message. */
+function errMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try { return JSON.stringify(err); } catch { return String(err); }
+}
+
 /** Retry a TronWeb SDK call up to maxTries times on 429 / rate-limit errors. */
 async function withRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> {
   let delay = 1500;
@@ -24,8 +52,8 @@ async function withRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> {
   for (let attempt = 1; attempt <= maxTries; attempt++) {
     try {
       return await fn();
-    } catch (err: any) {
-      const msg: string = err?.message ?? "";
+    } catch (err: unknown) {
+      const msg = errMessage(err);
       const is429 = msg.includes("429") || msg.includes("Too Many") || msg.includes("rate");
       if (!is429 || attempt >= maxTries) throw err;
       lastErr = err;
@@ -79,8 +107,8 @@ export async function getEnergyFeeSun(): Promise<number> {
     const sun = typeof fee === "number" && fee > 0 ? fee : ENERGY_FEE_FALLBACK_SUN;
     energyFeeCache = { sun, fetchedAt: now };
     return sun;
-  } catch (err: any) {
-    console.warn(`[sponsor] getChainParameters failed: ${err.message} — using ${ENERGY_FEE_FALLBACK_SUN} SUN/energy fallback`);
+  } catch (err: unknown) {
+    console.warn(`[sponsor] getChainParameters failed: ${errMessage(err)} — using ${ENERGY_FEE_FALLBACK_SUN} SUN/energy fallback`);
     return ENERGY_FEE_FALLBACK_SUN;
   }
 }
@@ -150,8 +178,8 @@ export async function getSponsorStatus(): Promise<SponsorStatus> {
       availableBandwidth,
       estimatedSendsRemaining: Math.floor(availableEnergy / MIN_ENERGY_FOR_USDT),
     };
-  } catch (err: any) {
-    return { configured: true, address, error: err.message };
+  } catch (err: unknown) {
+    return { configured: true, address, error: errMessage(err) };
   }
 }
 
@@ -296,10 +324,10 @@ export async function ensureUserReadyForSend(
       };
     }
     topUpTxid = result.txid;
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       ok: false,
-      reason: `TRX top-up broadcast failed: ${err.message ?? String(err)}`,
+      reason: `TRX top-up broadcast failed: ${errMessage(err)}`,
       diagnostics: diag,
     };
   }
@@ -459,10 +487,10 @@ export async function confirmTxSuccess(
       // Explicit failure — surface immediately
       if (txResult === "FAILED" || (receiptResult && receiptResult !== "SUCCESS")) {
         const reason = decodeContractRevertMessage(info) || receiptResult || "unknown";
-        const err: any = new Error(`Transaction reverted on-chain: ${reason}`);
-        err.txid = txid;
-        err.receipt = receipt;
-        throw err;
+        throw new SponsorTxError(`Transaction reverted on-chain: ${reason}`, {
+          txid,
+          receipt,
+        });
       }
 
       // Explicit success — only return when we have a finalized SUCCESS marker.
@@ -478,10 +506,10 @@ export async function confirmTxSuccess(
   }
 
   // Timed out waiting for indexer — don't claim failure, but flag as unconfirmed
-  const err: any = new Error(`Transaction not confirmed within ${Math.round(timeoutMs / 1000)}s — check Tronscan for status`);
-  err.txid = txid;
-  err.unconfirmed = true;
-  throw err;
+  throw new SponsorTxError(
+    `Transaction not confirmed within ${Math.round(timeoutMs / 1000)}s — check Tronscan for status`,
+    { txid, unconfirmed: true },
+  );
 }
 
 /** Extract a human-readable revert reason from a getTransactionInfo response. */

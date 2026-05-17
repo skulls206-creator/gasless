@@ -8,6 +8,7 @@ import {
   delegateEnergyToUser,
   broadcastSignedTx,
   confirmTxSuccess,
+  SponsorTxError,
   getUserAvailableEnergy,
   getEnergyFeeSun,
   MIN_ENERGY_FOR_USDT,
@@ -318,12 +319,14 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
     try {
       const receipt = await confirmTxSuccess(txid);
       console.log(`[gasless] Tx ${txid} confirmed (energy: ${receipt.energyUsed}, net: ${receipt.netUsed})`);
-    } catch (confirmErr: any) {
-      console.error(`[gasless] Tx ${txid} did NOT succeed: ${confirmErr.message}`);
+    } catch (confirmErr: unknown) {
+      const msg = confirmErr instanceof Error ? confirmErr.message : String(confirmErr);
+      const unconfirmed = confirmErr instanceof SponsorTxError ? confirmErr.unconfirmed : false;
+      console.error(`[gasless] Tx ${txid} did NOT succeed: ${msg}`);
       res.status(502).json({
-        error: confirmErr.message || "Transaction reverted on-chain",
+        error: msg || "Transaction reverted on-chain",
         txid,
-        unconfirmed: !!confirmErr.unconfirmed,
+        unconfirmed,
         sponsored,
       });
       return;
