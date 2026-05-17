@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useWallet } from "@/context/WalletContext";
-import { Wallet, Send, ArrowDownToLine, History, QrCode, ShieldAlert, LogOut } from "lucide-react";
+import { Wallet, ArrowLeftRight, History, QrCode, ShieldAlert, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationBell } from "@/components/ui/NotificationBell";
@@ -17,8 +17,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const navItems = [
     { href: "/dashboard", label: "Wallet", icon: Wallet },
-    { href: "/send", label: "Send", icon: Send },
-    { href: "/receive", label: "Receive", icon: ArrowDownToLine },
+    { href: "/swap", label: "Swap", icon: ArrowLeftRight },
     { href: "/history", label: "History", icon: History },
     { href: "/pay", label: "Buy", icon: QrCode },
     { href: "/backup", label: "Backup", icon: ShieldAlert },

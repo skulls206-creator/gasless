@@ -15,6 +15,7 @@ import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Send } from "@/pages/Send";
 import { Receive } from "@/pages/Receive";
+import { Swap } from "@/pages/Swap";
 import { History } from "@/pages/History";
 import { Pay } from "@/pages/Pay";
 import { Backup } from "@/pages/Backup";
@@ -104,6 +105,7 @@ function AuthGuard() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/send" component={Send} />
         <Route path="/receive" component={Receive} />
+        <Route path="/swap" component={Swap} />
         <Route path="/history" component={History} />
         <Route path="/pay" component={Pay} />
         <Route path="/backup" component={Backup} />

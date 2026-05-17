@@ -12,7 +12,13 @@ If an agent ships multiple changes in a day, add multiple entries.
 
 ---
 
-## 2026-05-17 — Fix pnpm-lock.yaml staleness blocking CI builds  (sha: 9883ac6)
+## 2026-05-17 — Swap page with SwapKit+Trocador, nav reorg  (sha: pending)
+**Satoshi.** Collapsed Send/Receive to remove from nav (routes still accessible).
+Added Swap nav item with full swap flow: asset picker (BTC, XMR, USDT/USDC
+across ETH/Base/TRON), quote screen with route comparison and price impact
+warning, confirm/sending steps with deposit address. Backend Trocador proxy
+endpoints (quote, create, status) added. SwapKit THORChain integration for
+BTC quotes. Frontend falls back to mock quotes when no provider responds. 
 **Satoshi.** The lockfile didn't match pnpm-workspace.yaml overrides,
 causing `pnpm install --frozen-lockfile` to exit 1 in both
 deploy-pages.yml workflow runs (#1 at 2a889ec, #2 at 13e99d8).
