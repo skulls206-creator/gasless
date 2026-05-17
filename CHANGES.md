@@ -114,13 +114,23 @@ instead of duplicating. Admin status (`/api/admin/status`) gains an
 `energyReadiness` block with `energyFeeSun`, `perSendTopUpTRX`, and
 `trxFloatSendsRemaining`.
 
-## Deployment milestones
+## 2026-05-17 — Tasks #14 & #15: rolled into adjacent typing work  (sha: 68e754d, 4df95d4)
+**Replit Agent.** Tasks #14 (broadcast-result typing) and #15
+(account / resource response typing) had no dedicated commits — the
+work was absorbed into Task #13 (`68e754d`, typed TronWeb wrapper
+`lib/tronweb-types.ts` covering `Account`, `AccountResourceMessage`,
+`ChainParameter`, `BroadcastReturn`) and Task #16 (`4df95d4`, typed
+`TransactionInfo` + `decodeContractRevertMessage`). No separate
+merge; recorded here for traceability.
 
-- **2026-05-17** — Backend published to Replit Deployments (sha
-  `6b4e2df`). API now has a stable `.replit.app` URL — use that as
-  `VITE_API_BASE_URL` / `GASLESS_API_BASE_URL` repo var for the GH
-  Pages frontend. `ALLOWED_ORIGINS=https://gasless.khurk.xyz` set on
-  the deployed env.
+## 2026-05-17 — Backend published to Replit Deployments  (sha: 6b4e2df)
+**Replit Agent.** Published the api-server. The api-server now has a
+stable `.replit.app` URL — use that as `VITE_API_BASE_URL` /
+`GASLESS_API_BASE_URL` repo variable for the GH Pages frontend build.
+`ALLOWED_ORIGINS=https://gasless.khurk.xyz` set on the deployed env
+so CORS fail-closed lets the production frontend through. This is
+the version of the backend the human-visible
+`gasless.khurk.xyz` will talk to.
 
 ## Backlog
 
