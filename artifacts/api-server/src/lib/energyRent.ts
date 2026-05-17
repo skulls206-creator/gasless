@@ -30,7 +30,7 @@ const ERP_BASE  = "https://api.tronenergyrent.com";
 
 // Single source of truth lives in sponsor.ts so admin status, readiness
 // checks, and rental sizing never drift apart.
-import { MIN_ENERGY_FOR_USDT } from "./sponsor.js";
+import { MIN_ENERGY_FOR_USDT, errMessage } from "./sponsor.js";
 
 export interface RentalResult {
   success: boolean;
@@ -38,6 +38,43 @@ export interface RentalResult {
   costTrx: number;
   provider: string;
   ref?: string;
+}
+
+// ── Provider response shapes ───────────────────────────────────────────────
+
+interface FeeeOrderResponse {
+  code?: number;
+  msg?: string;
+  data?: {
+    pay_amount?: number;
+    price_in_sun?: number;
+    resource_value?: number;
+    order_no?: string;
+  };
+}
+
+interface FeeeBalanceResponse {
+  code?: number;
+  data?: {
+    trx_money?: number;
+  };
+}
+
+interface ERPOrderResponse {
+  status?: string;
+  errorCode?: string;
+  errorDescription?: string;
+  payload?: {
+    totalPriceTrx?: number;
+    orderId?: string;
+  };
+}
+
+interface ERPBalanceResponse {
+  status?: string;
+  payload?: {
+    balanceTrx?: number;
+  };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -59,11 +96,11 @@ function getApiKey(): string {
  *  - Thrown network errors
  *  - HTTP 429 (rate-limit) and 5xx (server error)
  */
-async function fetchWithRetry(
+async function fetchWithRetry<T = unknown>(
   url: string,
   init?: RequestInit,
   maxTries = 3,
-): Promise<any> {
+): Promise<T> {
   let delay = 3_000;
   let lastErr: unknown;
 
@@ -71,7 +108,7 @@ async function fetchWithRetry(
     let res: Response | undefined;
     try {
       res = await fetch(url, init);
-    } catch (err) {
+    } catch (err: unknown) {
       lastErr = err;
       if (attempt < maxTries) await new Promise((r) => setTimeout(r, delay));
       delay *= 2;
@@ -86,7 +123,7 @@ async function fetchWithRetry(
       continue;
     }
 
-    return await res.json();
+    return (await res.json()) as T;
   }
 
   throw lastErr ?? new Error("fetchWithRetry: all attempts failed");
@@ -108,7 +145,7 @@ async function rentViaFeee(
 
   console.log(`[energyRent] Feee.io V3: ordering ${energyNeeded} energy → ${userAddress}`);
 
-  const result = await fetchWithRetry(
+  const result = await fetchWithRetry<FeeeOrderResponse>(
     `${FEEE_BASE}/v3/order/create`,
     {
       method:  "POST",
@@ -122,7 +159,7 @@ async function rentViaFeee(
     throw new Error(`Feee.io order failed (code ${result.code}): ${result.msg}`);
   }
 
-  const data       = result.data ?? {};
+  const data = result.data ?? {};
   const costTrx: number = data.pay_amount
     ?? (data.price_in_sun ? data.price_in_sun / 1_000_000 : 0.013);
   const delivered: number = data.resource_value ?? energyNeeded;
@@ -147,14 +184,15 @@ async function rentViaFeee(
 async function getFeeeBalance(): Promise<number> {
   const apiKey = getApiKey();
   try {
-    const result = await fetchWithRetry(
+    const result = await fetchWithRetry<FeeeBalanceResponse>(
       `${FEEE_BASE}/v2/api/query`,
       { headers: { key: apiKey } },
       2,
     );
     if (result.code !== 0) return 0;
     return result.data?.trx_money ?? 0;
-  } catch {
+  } catch (err: unknown) {
+    console.warn(`[energyRent] getFeeeBalance failed: ${errMessage(err)}`);
     return 0;
   }
 }
@@ -178,7 +216,7 @@ async function rentViaERP(
 
   console.log(`[energyRent] ERP: ordering ${energyNeeded} energy (${period}) → ${userAddress}`);
 
-  const result = await fetchWithRetry(url.toString(), undefined, 3);
+  const result = await fetchWithRetry<ERPOrderResponse>(url.toString(), undefined, 3);
 
   if (result.status !== "SUCCESS") {
     throw new Error(
@@ -209,13 +247,14 @@ async function rentViaERP(
 async function getERPBalance(): Promise<number> {
   const apiKey = getApiKey();
   try {
-    const result = await fetchWithRetry(
+    const result = await fetchWithRetry<ERPBalanceResponse>(
       `${ERP_BASE}/get-balance?apiKey=${encodeURIComponent(apiKey)}`,
       undefined,
       2,
     );
     return result.status === "SUCCESS" ? (result.payload?.balanceTrx ?? 0) : 0;
-  } catch {
+  } catch (err: unknown) {
+    console.warn(`[energyRent] getERPBalance failed: ${errMessage(err)}`);
     return 0;
   }
 }
@@ -267,8 +306,8 @@ export async function getRentalBalance(): Promise<{
       trxBalance,
       estimatedSendsRemaining: costPerSend > 0 ? Math.floor(trxBalance / costPerSend) : 0,
     };
-  } catch (err) {
-    console.error("[energyRent] getRentalBalance error:", err);
+  } catch (err: unknown) {
+    console.error(`[energyRent] getRentalBalance error: ${errMessage(err)}`);
     return null;
   }
 }
