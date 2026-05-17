@@ -12,6 +12,14 @@ If an agent ships multiple changes in a day, add multiple entries.
 
 ---
 
+## 2026-05-17 — Pay link domain, confirm all NEXT.md items pre-built  (sha: pending)
+**Satoshi.** Verified Themes A–C from NEXT.md: TronGrid proxy (A1–A6)
+already routed through backend, useUSDTTransactions/useTronResources/load-more
+already wired, QRScanner.tsx exists with camera/error handling/address extraction
+(B2), Send page wired to QR scanner and ?to= pre-fill (B3), PayLink.tsx public
+route exists (B5), dashboard copy already says 1–3 TRX (C1). Only missing item:
+getPaymentLink() now uses explicit https://gasless.one/pay/ URL (B4).
+
 ## 2026-05-17 — Swap page with SwapKit+Trocador, nav reorg  (sha: pending)
 **Satoshi.** Collapsed Send/Receive to remove from nav (routes still accessible).
 Added Swap nav item with full swap flow: asset picker (BTC, XMR, USDT/USDC
