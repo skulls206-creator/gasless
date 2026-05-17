@@ -13,7 +13,7 @@ import {
 
 function getPaymentLink(address: string): string {
   const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-  return `https://gasless.one/pay/${address}`;
+  return `https://gasless.khurk.xyz/pay/${address}`;
 }
 
 export function Receive() {
