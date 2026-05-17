@@ -9,7 +9,11 @@ import {
   broadcastSignedTx,
   confirmTxSuccess,
   getUserAvailableEnergy,
+  getEnergyFeeSun,
   MIN_ENERGY_FOR_USDT,
+  BANDWIDTH_BURN_PER_TX_SUN,
+  READINESS_SAFETY_PAD_SUN,
+  TRX_SPONSOR_RESERVE_SUN,
   type SponsorStatus,
 } from "../lib/sponsor.js";
 import { isRentalConfigured, rentEnergyForUser, getRentalBalance } from "../lib/energyRent.js";
@@ -341,12 +345,36 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
               console.log(`[gasless] Fee-tx readiness top-up: ${feeReady.topUpAmountTRX} TRX (tx: ${feeReady.topUpTxid})`);
             }
             const feeResult = await broadcastSignedTx(signedFeeTx);
-            feeTxid = feeResult.txid;
-            console.log(`[gasless] Fee tx broadcast: ${feeTxid}`);
+            const pendingFeeTxid = feeResult.txid;
+            console.log(`[gasless] Fee tx broadcast: ${pendingFeeTxid} — awaiting on-chain confirmation`);
+            // Confirm the fee transfer actually executed. Without this we
+            // could report success to the client while the $1 USDT never
+            // landed in the sponsor wallet (revert / OUT_OF_ENERGY).
+            try {
+              const feeReceipt = await confirmTxSuccess(pendingFeeTxid);
+              feeTxid = pendingFeeTxid;
+              console.log(
+                `[gasless] Fee tx ${pendingFeeTxid} confirmed ` +
+                `(energy: ${feeReceipt.energyUsed}, net: ${feeReceipt.netUsed})`,
+              );
+            } catch (confirmErr: any) {
+              feeError = confirmErr.message ?? "Fee tx did not confirm on-chain";
+              console.error(
+                `[gasless] Fee tx ${pendingFeeTxid} broadcast but did NOT confirm: ${feeError}`,
+              );
+              // Leave feeTxid=null so the client treats fee as failed.
+            }
           }
         } else {
           const feeResult = await broadcastSignedTx(signedFeeTx);
-          feeTxid = feeResult.txid;
+          const pendingFeeTxid = feeResult.txid;
+          try {
+            await confirmTxSuccess(pendingFeeTxid);
+            feeTxid = pendingFeeTxid;
+          } catch (confirmErr: any) {
+            feeError = confirmErr.message ?? "Fee tx did not confirm on-chain";
+            console.error(`[gasless] Fee tx ${pendingFeeTxid} did not confirm: ${feeError}`);
+          }
         }
       } catch (feeErr: any) {
         feeError = feeErr.message ?? "Fee broadcast failed";
@@ -365,37 +393,52 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
 
 router.get("/admin/status", requireAdmin, async (_req, res): Promise<void> => {
   try {
-    const [status, rental] = await Promise.all([
+    // Read live energy unit price from the shared cached source so the
+    // dashboard agrees with the runtime decision in ensureUserReadyForSend.
+    const [status, rental, energyFeeSun] = await Promise.all([
       getSponsorStatus(),
       getRentalBalance(),
+      getEnergyFeeSun(),
     ]);
 
-    // Energy-readiness summary — can the sponsor afford to ship N more sends
-    // worth of TRX top-ups right now (worst case: zero delegated energy)?
-    let energyReadiness: {
-      energyFeeSun: number | null;
-      maxTopUpsAtFullBurn: number | null;
-      perSendTopUpTRX: number | null;
-    } = { energyFeeSun: null, maxTopUpsAtFullBurn: null, perSendTopUpTRX: null };
+    // Readiness signals operators need at-a-glance:
+    //   rentalOk              — on-demand rental provider has TRX float
+    //   stakedDelegationOk    — sponsor's own staked pool can cover ≥1 send
+    //   trxFloatSendsRemaining — worst-case sends the sponsor TRX float can
+    //                            still bankroll if BOTH rental and staked
+    //                            delegation failed (full energy burn per tx)
+    const rentalOk = isRentalConfigured() && (rental?.trxBalance ?? 0) > 0;
+
+    let stakedDelegationOk = false;
+    let trxFloatSendsRemaining = 0;
+    let perSendTopUpTRX: number | null = null;
 
     if ("trxBalance" in status) {
-      // Mirror the constants from ensureUserReadyForSend so the dashboard
-      // shows the same units the runtime decides with.
-      const ENERGY_FEE_FALLBACK = 210;
-      const BANDWIDTH_TRX = 0.5;
-      const PAD_TRX = 1.0;
-      const RESERVE_TRX = 5.0;
-      const MIN_ENERGY = 130_000;
+      stakedDelegationOk = status.availableEnergy >= MIN_ENERGY_FOR_USDT;
 
-      // Single per-send worst-case top-up (no delegated energy):
-      const perSend = (MIN_ENERGY * ENERGY_FEE_FALLBACK) / 1e6 + BANDWIDTH_TRX + PAD_TRX;
-      const spendable = Math.max(0, status.trxBalance - RESERVE_TRX);
-      energyReadiness = {
-        energyFeeSun: ENERGY_FEE_FALLBACK,
-        perSendTopUpTRX: Number(perSend.toFixed(3)),
-        maxTopUpsAtFullBurn: Math.floor(spendable / perSend),
-      };
+      // Worst-case per-send TRX top-up (zero delegated energy):
+      //   (MIN_ENERGY × energyFeeSun) + bandwidthBurn + safetyPad
+      const perSendSun =
+        MIN_ENERGY_FOR_USDT * energyFeeSun +
+        BANDWIDTH_BURN_PER_TX_SUN +
+        READINESS_SAFETY_PAD_SUN;
+      perSendTopUpTRX = Number((perSendSun / 1e6).toFixed(3));
+
+      const spendableSun = Math.max(
+        0,
+        status.trxBalance * 1e6 - TRX_SPONSOR_RESERVE_SUN,
+      );
+      trxFloatSendsRemaining = Math.floor(spendableSun / perSendSun);
     }
+
+    const energyReadiness = {
+      rentalOk,
+      stakedDelegationOk,
+      trxFloatSendsRemaining,
+      // Keep diagnostic detail so operators can sanity-check the math:
+      energyFeeSun,
+      perSendTopUpTRX,
+    };
 
     res.json({ ...status, rental: rental ?? null, energyReadiness });
   } catch (err: any) {

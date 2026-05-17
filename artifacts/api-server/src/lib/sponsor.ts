@@ -32,14 +32,14 @@ export const MIN_ENERGY_FOR_USDT = 130_000;
 
 // Bandwidth burn per TRC-20 transfer is ~345 bytes × 1000 SUN/byte ≈
 // 0.345 TRX. Round up to 0.5 TRX/tx as a safety floor.
-const BANDWIDTH_BURN_PER_TX_SUN = 500_000;
+export const BANDWIDTH_BURN_PER_TX_SUN = 500_000;
 
 // Pad every top-up by 1 TRX over the computed minimum to absorb chain
 // param changes and rounding error.
-const READINESS_SAFETY_PAD_SUN = 1_000_000;
+export const READINESS_SAFETY_PAD_SUN = 1_000_000;
 
 // Never drain sponsor wallet below this reserve.
-const TRX_SPONSOR_RESERVE_SUN = 5_000_000; // 5 TRX
+export const TRX_SPONSOR_RESERVE_SUN = 5_000_000; // 5 TRX
 
 // How long to poll for the top-up tx to land on-chain.
 const TOPUP_SETTLE_TIMEOUT_MS = 30_000;
@@ -52,7 +52,7 @@ const ENERGY_FEE_TTL_MS = 5 * 60_000;
 // Hard fallback if chain params ever fail — current mainnet value as of May 2026.
 const ENERGY_FEE_FALLBACK_SUN = 210;
 
-async function getEnergyFeeSun(): Promise<number> {
+export async function getEnergyFeeSun(): Promise<number> {
   const now = Date.now();
   if (energyFeeCache && now - energyFeeCache.fetchedAt < ENERGY_FEE_TTL_MS) {
     return energyFeeCache.sun;
