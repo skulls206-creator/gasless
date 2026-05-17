@@ -289,8 +289,12 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
       const readiness = await ensureUserReadyForSend(userAddress, txCount);
       if (!readiness.ok) {
         console.error(`[gasless] Readiness check failed for ${userAddress}: ${readiness.reason}`);
+        // Standardized user-facing message; detailed reason kept in diagnostics
+        // so client toasts/alerts can render a stable string while logs/admin
+        // dashboards still see the underlying cause.
         res.status(503).json({
-          error: readiness.reason ?? "Resource readiness check failed",
+          error: "Sponsor wallet underfunded — please try again later",
+          reason: readiness.reason,
           retryable: true,
           sponsored,
           diagnostics: readiness.diagnostics,
