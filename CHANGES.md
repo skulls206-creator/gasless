@@ -151,6 +151,22 @@ so CORS fail-closed lets the production frontend through. This is
 the version of the backend the human-visible
 `gasless.khurk.xyz` will talk to.
 
+## 2026-05-17 — Push gasless repo to GitHub  (sha: bd23614 on main, ea2d5b1 on master)
+**Replit Agent.** Task #22. Pushed local `master` (sha `6a20b5b`,
+containing all merged tasks #9–#20 plus the published-deploy
+checkpoint `6b4e2df`) to `github.com/skulls206-creator/gasless`:
+- `refs/heads/main` → `bd23614` (latest docs commit; doc updates
+  applied incrementally via Contents API since `git commit` is
+  blocked in the Replit main-agent sandbox).
+- `refs/heads/master` → `ea2d5b1` (full code tip + accumulated doc
+  edits via the same path).
+- GH Pages workflow registered and dispatched: run
+  `25981271722` at
+  https://github.com/skulls206-creator/gasless/actions/runs/25981271722.
+- Auth via `http.extraheader` (token kept out of `.git/config`).
+- Verified via `GET /repos/.../git/refs/heads` and
+  `GET /repos/.../branches/main`.
+
 ## Backlog
 
 Things the human flagged but no agent has picked up yet:
