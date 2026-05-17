@@ -21,12 +21,33 @@ edit.** Update it when you learn a new convention.
 ```
 artifacts/
   api-server/       Express + TypeScript backend (Replit-hosted)
+    src/lib/
+      sponsor.ts          Resource readiness, SponsorTxError, constants
+      tronweb-types.ts    Typed TronWeb wrappers — use these, not raw tw.*
+      energyRent.ts       Optional on-demand rental provider
+    src/routes/           gasless, tron, push, version
   tron-wallet/      Vite + React PWA (GitHub Pages)
+    src/lib/api.ts        apiUrl() helper, BUILD_ID
+    src/hooks/use-tron.ts useSponsorInfo, useUSDTBalance, useSendUSDT, …
   mockup-sandbox/   Component preview server (dev only)
 .github/workflows/  CI — only the GH Pages deploy lives here
 AGENTS.md           This file
 CHANGES.md          Append-only changelog, one entry per merged change
 ```
+
+## Deployment status
+
+- **Backend** is **published** to Replit Deployments. The stable
+  `.replit.app` URL is what the frontend's `GASLESS_API_BASE_URL`
+  repo variable should point at. `ALLOWED_ORIGINS=https://gasless.khurk.xyz`
+  is set on the deployed env.
+- **Frontend** GH Pages deploy is wired (`.github/workflows/deploy-pages.yml`).
+  It builds on push to `main`/`master` touching `artifacts/tron-wallet/**`,
+  bakes `VITE_API_BASE_URL` from the `GASLESS_API_BASE_URL` repo
+  variable, and serves at `gasless.khurk.xyz`.
+- **Human still owns**: enabling GH Pages source = "GitHub Actions",
+  setting the `GASLESS_API_BASE_URL` repo variable, and the DNS
+  `gasless.khurk.xyz → skulls206-creator.github.io` CNAME.
 
 ## Build identity
 
@@ -69,15 +90,39 @@ the same code.
 
 ## Code style
 
-- TypeScript strict; existing strict errors in `sponsor.ts` /
-  `crypto.ts` / `Backup.tsx` are pre-existing TronWeb / WebCrypto type
-  mismatches — runtime works. Don't introduce new ones.
+- TypeScript strict; `pnpm typecheck` exits 0 across the monorepo as
+  of sha `2e91e1c`. **Do not regress this.** No new `any` types, no
+  new `as any` casts in routes or `lib/`.
+- Catch blocks: `catch (err: unknown)` + `errMessage(err)` from
+  `lib/sponsor.ts`. Never `catch (err: any)`. Never read fields off
+  `err` without narrowing.
+- TronWeb calls go through typed helpers in `lib/tronweb-types.ts`
+  (`getAccount`, `getAccountResources`, `buildSendTrxTx`, etc.).
+  Only `broadcastUnknown()` is allowed when the caller passes a
+  pre-signed tx whose contract shape isn't known at compile time
+  (used in `broadcastSignedTx`).
+- Sponsor tx failures throw `SponsorTxError` (carries `txid`,
+  optional `receipt`, `unconfirmed`). Don't mutate fields onto a
+  plain `Error`.
 - Functional React. shadcn/ui + Tailwind. No CSS modules, no styled
   components.
 - Backend: Express + TypeScript. No new ORMs; we don't use a DB.
 - Error responses: `{ error: string, ...optional fields }`. Use
   appropriate status codes (400 user, 403 auth, 429 rate, 502 chain
   failure, 503 unrecoverable resource).
+
+## Sponsor health surface
+
+The frontend reads `/api/sponsor-info` (public, no auth) and derives
+`SponsorHealth` via `deriveSponsorHealth()`:
+- `active` — sponsor configured + funded, ≥5 sends remaining.
+- `degraded` — sponsor configured + funded, but <5 sends remaining.
+- `unavailable` — sponsor configured but can't cover sends right now.
+- `off` — sponsor not configured.
+
+The Send page only **blocks** the user when gasless is the *only*
+path AND health is `unavailable` (i.e. user has no energy of their
+own). If the user has energy, sends still work without the sponsor.
 
 ## Workflow
 
@@ -87,9 +132,10 @@ the same code.
    before stomping it.
 3. **Make the change.** Keep PRs/commits scoped — one logical change
    per commit, descriptive message.
-4. **Test what you can.** Backend: run the dev server, hit the route
-   with curl. Frontend: build and check console. Real mainnet sends
-   require the human (they cost real TRX/USDT).
+4. **Test what you can.** Always run `pnpm typecheck` — it must exit
+   0. Backend: run the dev server, hit the route with curl. Frontend:
+   build and check console. Real mainnet sends require the human (they
+   cost real TRX/USDT).
 5. **Update CHANGES.md** with a one-line entry under the date. Include
    the short git SHA after the merge.
 6. **Update AGENTS.md** if you learned a new rule or convention.
