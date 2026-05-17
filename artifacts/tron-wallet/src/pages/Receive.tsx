@@ -99,6 +99,14 @@ export function Receive() {
         </ContextMenuContent>
       </ContextMenu>
 
+      {/* TRON network warning — right under the address so users see it before sending */}
+      <div className="w-full max-w-sm flex gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive-foreground/90">
+        <AlertTriangle className="w-6 h-6 text-destructive shrink-0" />
+        <p className="text-xs leading-relaxed">
+          <strong>Important:</strong> Send ONLY USDT on the TRON (TRC-20) network to this address. Sending other tokens may result in permanent loss.
+        </p>
+      </div>
+
       {/* Payment link card */}
       {address && (
         <div className="w-full max-w-sm bg-primary/5 border border-primary/20 rounded-2xl p-5 space-y-3">
@@ -123,12 +131,7 @@ export function Receive() {
         </div>
       )}
 
-      <div className="w-full max-w-sm flex gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive-foreground/90">
-        <AlertTriangle className="w-6 h-6 text-destructive shrink-0" />
-        <p className="text-xs leading-relaxed">
-          <strong>Important:</strong> Send ONLY USDT on the TRON (TRC-20) network to this address. Sending other tokens may result in permanent loss.
-        </p>
-      </div>
+
     </div>
   );
 }
