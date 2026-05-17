@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
-import { useUSDTBalance, useTronResources, useSendUSDT, useAppConfig } from "@/hooks/use-tron";
+import { useUSDTBalance, useTronResources, useSendUSDT, useAppConfig, useSponsorInfo, deriveSponsorHealth } from "@/hooks/use-tron";
 import { validateAddress } from "@/lib/tron";
 import { apiUrl } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -25,19 +25,6 @@ import {
 import { GaslessModal } from "@/components/ui/GaslessModal";
 import { QRScanner } from "@/components/ui/QRScanner";
 import { useQuery } from "@tanstack/react-query";
-
-function useSponsorStatus() {
-  return useQuery({
-    queryKey: ["sponsor-status"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/sponsor-info"));
-      if (!res.ok) return { configured: false };
-      return res.json();
-    },
-    staleTime: 60_000,
-    retry: false,
-  });
-}
 
 function useTrxPrice() {
   return useQuery({
@@ -69,7 +56,8 @@ export function Send() {
 
   const { data: balance } = useUSDTBalance(address);
   const { data: resources } = useTronResources(address);
-  const { data: sponsor } = useSponsorStatus();
+  const { data: sponsor } = useSponsorInfo();
+  const sponsorHealth = deriveSponsorHealth(sponsor);
   const { data: config } = useAppConfig();
   const { data: trxPriceUsd } = useTrxPrice();
   const sendMutation = useSendUSDT();
@@ -286,10 +274,15 @@ export function Send() {
   const numAmount = parseFloat(amount) || 0;
   const totalRequired = feesEnabled ? numAmount + feeAmount : numAmount;
   const userHasEnergy = resources?.isSufficientForTRC20;
-  const sponsorActive = sponsor?.configured && sponsor?.active;
+  const sponsorActive = sponsorHealth === "active" || sponsorHealth === "degraded";
   const networkFeeIsFree = userHasEnergy || sponsorActive;
   const hasEnoughBalance = totalRequired > 0 && totalRequired <= (balance || 0);
-  const isFormValid = isValidAddress && numAmount > 0 && hasEnoughBalance;
+  // Block sending only when gasless is the user's *only* path AND it's unavailable.
+  // If the user has their own energy, the network fee can be paid directly so the
+  // send still works without the sponsor.
+  const gaslessBlocked = sponsorHealth === "unavailable" && !userHasEnergy;
+  const isFormValid =
+    isValidAddress && numAmount > 0 && hasEnoughBalance && !gaslessBlocked;
 
   return (
     <>
@@ -457,6 +450,33 @@ export function Send() {
               )}
             </div>
           </div>
+
+          {gaslessBlocked && (
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 flex gap-3 items-start">
+              <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+              <div className="text-xs text-destructive leading-relaxed">
+                <p className="font-semibold mb-0.5">Gasless temporarily unavailable</p>
+                <p className="text-destructive/80">
+                  The sponsor wallet can't cover network fees right now. We're
+                  auto-checking every minute — try again in a few minutes, or top
+                  up your TRX so you can pay the network fee directly.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {sponsorHealth === "degraded" && !userHasEnergy && (
+            <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 flex gap-3 items-start">
+              <AlertTriangle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <p className="text-xs text-primary-foreground/90 leading-relaxed">
+                Gasless capacity is running low
+                {sponsor?.estimatedSendsRemaining != null
+                  ? ` (~${sponsor.estimatedSendsRemaining} sponsored sends remaining).`
+                  : "."}{" "}
+                Your send should still go through.
+              </p>
+            </div>
+          )}
 
           <Button
             className="w-full h-14 text-lg mt-4"

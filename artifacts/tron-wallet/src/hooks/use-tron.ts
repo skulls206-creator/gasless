@@ -14,6 +14,57 @@ export interface TronResources {
   isSufficientForTRC20: boolean;
 }
 
+export interface SponsorInfo {
+  configured: boolean;
+  active: boolean;
+  estimatedSendsRemaining?: number | null;
+}
+
+export type SponsorHealth = "active" | "degraded" | "unavailable" | "off";
+
+/** Threshold below which gasless is shown as "degraded" rather than "active". */
+const DEGRADED_SENDS_THRESHOLD = 5;
+
+export function deriveSponsorHealth(info: SponsorInfo | undefined): SponsorHealth {
+  if (!info || !info.configured) return "off";
+  if (!info.active) return "unavailable";
+  const remaining = info.estimatedSendsRemaining;
+  if (typeof remaining === "number" && remaining > 0 && remaining < DEGRADED_SENDS_THRESHOLD) {
+    return "degraded";
+  }
+  return "active";
+}
+
+/**
+ * Public sponsor readiness. Auto-refreshes every 60s so the dashboard and
+ * Send page proactively reflect when the sponsor wallet can't cover sends.
+ */
+export function useSponsorInfo() {
+  return useQuery<SponsorInfo>({
+    queryKey: ["sponsor-info"],
+    queryFn: async ({ client }): Promise<SponsorInfo> => {
+      try {
+        const res = await fetch(apiUrl("/api/sponsor-info"));
+        if (!res.ok) throw new Error(`sponsor-info HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        // Transient API failure: don't silently degrade to "off" (which hides
+        // the pill). If we previously knew the sponsor was configured, treat
+        // this as "unavailable" so the user is warned rather than misled.
+        const prev = client.getQueryData<SponsorInfo>(["sponsor-info"]);
+        if (prev?.configured) {
+          return { configured: true, active: false };
+        }
+        throw err;
+      }
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
+}
+
 export interface Trc20Transaction {
   transaction_id: string;
   token_info: { symbol: string; address: string; decimals: number };

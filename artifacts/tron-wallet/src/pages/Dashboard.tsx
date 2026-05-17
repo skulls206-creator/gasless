@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useWallet } from "@/context/WalletContext";
-import { useUSDTBalance, useTronResources } from "@/hooks/use-tron";
+import { useUSDTBalance, useTronResources, useSponsorInfo, deriveSponsorHealth, type SponsorHealth } from "@/hooks/use-tron";
 import { formatAddress, formatCurrency } from "@/lib/utils";
 import { Copy, ArrowUpRight, ArrowDownToLine, Zap, Battery, AlertTriangle, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ export function Dashboard() {
 
   const { data: balance, isLoading: isLoadingBalance } = useUSDTBalance(address);
   const { data: resources, isLoading: isLoadingResources } = useTronResources(address);
+  const { data: sponsor } = useSponsorInfo();
+  const sponsorHealth = deriveSponsorHealth(sponsor);
 
   const [showEduModal, setShowEduModal] = useState(false);
   const [pinPromptDismissed, setPinPromptDismissed] = useState(
@@ -73,10 +75,26 @@ export function Dashboard() {
           <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
           <span className="font-mono text-sm text-foreground/90">{formatAddress(address || "")}</span>
         </div>
-        <button onClick={handleCopy} className="text-muted-foreground hover:text-foreground transition-colors p-1">
-          <Copy className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <GaslessPill health={sponsorHealth} />
+          <button onClick={handleCopy} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+            <Copy className="w-4 h-4" />
+          </button>
+        </div>
       </div>
+
+      {sponsorHealth === "unavailable" && (
+        <div className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 flex gap-3 items-start">
+          <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <div className="text-xs text-destructive leading-relaxed">
+            <p className="font-semibold mb-0.5">Gasless sending temporarily unavailable</p>
+            <p className="text-destructive/80">
+              The sponsor wallet can't cover network fees right now — we're
+              auto-checking every minute. Try again in a few minutes.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Main Balance Card */}
       <div className="glass-panel rounded-3xl p-8 text-center relative overflow-hidden">
@@ -172,6 +190,27 @@ export function Dashboard() {
       </div>
 
       <GaslessModal isOpen={showEduModal} onClose={() => setShowEduModal(false)} />
+    </div>
+  );
+}
+
+function GaslessPill({ health }: { health: SponsorHealth }) {
+  if (health === "off") return null;
+
+  const styles: Record<Exclude<SponsorHealth, "off">, { dot: string; text: string; label: string }> = {
+    active:      { dot: "bg-success",     text: "text-success",     label: "Gasless: active" },
+    degraded:    { dot: "bg-yellow-400 animate-pulse", text: "text-yellow-400", label: "Gasless: degraded" },
+    unavailable: { dot: "bg-destructive animate-pulse", text: "text-destructive", label: "Gasless: unavailable" },
+  };
+  const s = styles[health];
+
+  return (
+    <div
+      className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-background/40 border border-white/5 ${s.text}`}
+      title={s.label}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+      {s.label}
     </div>
   );
 }
