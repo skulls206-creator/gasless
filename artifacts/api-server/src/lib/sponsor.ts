@@ -1,4 +1,18 @@
 import { TronWeb } from "tronweb";
+import {
+  buildDelegateResourceTx,
+  buildFreezeBalanceV2Tx,
+  buildSendTrxTx,
+  broadcast,
+  broadcastUnknown,
+  getAccount,
+  getAccountResources,
+  getChainParameters,
+  getTransactionInfo,
+  signTx,
+  type AnyBroadcastReturn,
+  type TronWebClient,
+} from "./tronweb-types.js";
 
 const TRONGRID = "https://api.trongrid.io";
 
@@ -59,7 +73,7 @@ export async function getEnergyFeeSun(): Promise<number> {
   }
   try {
     const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
-    const params: any[] = await withRetry(() => tronWeb.trx.getChainParameters());
+    const params = await withRetry(() => getChainParameters(tronWeb));
     const fee = params.find((p) => p?.key === "getEnergyFee")?.value;
     const sun = typeof fee === "number" && fee > 0 ? fee : ENERGY_FEE_FALLBACK_SUN;
     energyFeeCache = { sun, fetchedAt: now };
@@ -74,7 +88,7 @@ function normalizePk(pk: string): string {
   return pk.startsWith("0x") || pk.startsWith("0X") ? pk.slice(2) : pk;
 }
 
-function getSponsorTronWeb(): InstanceType<typeof TronWeb> | null {
+function getSponsorTronWeb(): TronWebClient | null {
   const rawPk = process.env.SPONSOR_PRIVATE_KEY;
   if (!rawPk) return null;
   const pk = normalizePk(rawPk.trim());
@@ -111,18 +125,18 @@ export async function getSponsorStatus(): Promise<SponsorStatus> {
 
   try {
     const [account, resources] = await Promise.all([
-      withRetry(() => tronWeb.trx.getAccount(address)),
-      withRetry(() => tronWeb.trx.getAccountResources(address)),
+      withRetry(() => getAccount(tronWeb, address)),
+      withRetry(() => getAccountResources(tronWeb, address)),
     ]);
 
-    const trxBalance      = ((account as any).balance || 0) / 1_000_000;
-    const energyLimit     = (resources as any).EnergyLimit || 0;
-    const energyUsed      = (resources as any).EnergyUsed  || 0;
+    const trxBalance      = (account.balance || 0) / 1_000_000;
+    const energyLimit     = resources.EnergyLimit || 0;
+    const energyUsed      = resources.EnergyUsed  || 0;
     const availableEnergy = energyLimit - energyUsed;
-    const bwFree          = (resources as any).freeNetLimit  || 0;
-    const bwFreeUsed      = (resources as any).freeNetUsed   || 0;
-    const bwStaked        = (resources as any).NetLimit      || 0;
-    const bwStakedUsed    = (resources as any).NetUsed       || 0;
+    const bwFree          = resources.freeNetLimit  || 0;
+    const bwFreeUsed      = resources.freeNetUsed   || 0;
+    const bwStaked        = resources.NetLimit      || 0;
+    const bwStakedUsed    = resources.NetUsed       || 0;
     const availableBandwidth = bwFree - bwFreeUsed + bwStaked - bwStakedUsed;
 
     return {
@@ -145,13 +159,13 @@ export async function stakeTRXForEnergy(amountTRX: number): Promise<{ txid: stri
   if (!tronWeb) throw new Error("Sponsor wallet not configured");
 
   const amountSun = Math.floor(amountTRX * 1_000_000);
-  const tx = await (tronWeb.transactionBuilder as any).freezeBalanceV2(amountSun, "ENERGY");
+  const tx = await buildFreezeBalanceV2Tx(tronWeb, amountSun, "ENERGY");
   const pk = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
-  const signedTx = await tronWeb.trx.sign(tx, pk);
-  const result = await tronWeb.trx.sendRawTransaction(signedTx);
+  const signedTx = await signTx(tronWeb, tx, pk);
+  const result = await broadcast(tronWeb, signedTx);
 
-  if (!(result as any).result) throw new Error(`Stake failed: ${JSON.stringify(result)}`);
-  return { txid: (result as any).txid };
+  if (!result.result) throw new Error(`Stake failed: ${JSON.stringify(result)}`);
+  return { txid: result.txid };
 }
 
 // ── Pre-broadcast resource readiness ───────────────────────────────────────
@@ -206,12 +220,12 @@ export async function ensureUserReadyForSend(
 
   // Snapshot user resources + balance in parallel.
   const [userAccount, userResources] = await Promise.all([
-    withRetry(() => tronWeb.trx.getAccount(userAddress)),
-    withRetry(() => tronWeb.trx.getAccountResources(userAddress)),
+    withRetry(() => getAccount(tronWeb, userAddress)),
+    withRetry(() => getAccountResources(tronWeb, userAddress)),
   ]);
-  const trxAvailableSun: number = (userAccount as any).balance ?? 0;
-  const energyLimit:     number = (userResources as any).EnergyLimit ?? 0;
-  const energyUsed:      number = (userResources as any).EnergyUsed  ?? 0;
+  const trxAvailableSun: number = userAccount.balance ?? 0;
+  const energyLimit:     number = userResources.EnergyLimit ?? 0;
+  const energyUsed:      number = userResources.EnergyUsed  ?? 0;
   const energyAvailable        = Math.max(0, energyLimit - energyUsed);
 
   const energyRequired = MIN_ENERGY_FOR_USDT * txCount;
@@ -240,8 +254,8 @@ export async function ensureUserReadyForSend(
 
   // Sponsor must cover the gap.
   const gapSun         = trxRequiredSun - trxAvailableSun;
-  const sponsorAccount = await withRetry(() => tronWeb.trx.getAccount(sponsorAddress));
-  const sponsorBalanceSun: number = (sponsorAccount as any).balance ?? 0;
+  const sponsorAccount = await withRetry(() => getAccount(tronWeb, sponsorAddress));
+  const sponsorBalanceSun: number = sponsorAccount.balance ?? 0;
   diagnostics.trxRequiredSun = trxRequiredSun;
   const diag = { ...diagnostics, sponsorBalanceSun };
 
@@ -267,20 +281,20 @@ export async function ensureUserReadyForSend(
   let topUpTxid: string;
   try {
     const tx       = await withRetry(() =>
-      tronWeb.transactionBuilder.sendTrx(userAddress, gapSun, sponsorAddress),
+      buildSendTrxTx(tronWeb, userAddress, gapSun, sponsorAddress),
     );
     const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
-    const signedTx = await tronWeb.trx.sign(tx, pk);
-    const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
+    const signedTx = await signTx(tronWeb, tx, pk);
+    const result   = await withRetry(() => broadcast(tronWeb, signedTx));
 
-    if ((result as any).result !== true) {
+    if (result.result !== true) {
       return {
         ok: false,
         reason: `TRX top-up rejected: ${decodeTronError(result)}`,
         diagnostics: diag,
       };
     }
-    topUpTxid = (result as any).txid as string;
+    topUpTxid = result.txid;
   } catch (err: any) {
     return {
       ok: false,
@@ -298,7 +312,7 @@ export async function ensureUserReadyForSend(
   while (Date.now() - start < TOPUP_SETTLE_TIMEOUT_MS) {
     await new Promise((r) => setTimeout(r, TOPUP_SETTLE_POLL_MS));
     try {
-      const acct: any = await tronWeb.trx.getAccount(userAddress);
+      const acct = await getAccount(tronWeb, userAddress);
       const bal: number = acct.balance ?? 0;
       if (bal >= targetSun) {
         console.log(
@@ -336,15 +350,15 @@ export async function delegateEnergyToUser(userAddress: string, txCount = 1): Pr
 
   const energyNeeded = MIN_ENERGY_FOR_USDT * txCount;
 
-  const userResources    = await withRetry(() => tronWeb.trx.getAccountResources(userAddress));
-  const userEnergy       = ((userResources as any).EnergyLimit || 0) - ((userResources as any).EnergyUsed || 0);
+  const userResources    = await withRetry(() => getAccountResources(tronWeb, userAddress));
+  const userEnergy       = (userResources.EnergyLimit || 0) - (userResources.EnergyUsed || 0);
   if (userEnergy >= energyNeeded) {
     console.log(`[sponsor] User ${userAddress} has ${userEnergy} energy — skipping delegation`);
     return;
   }
 
-  const sponsorResources = await withRetry(() => tronWeb.trx.getAccountResources(sponsorAddress));
-  const sponsorEnergy    = ((sponsorResources as any).EnergyLimit || 0) - ((sponsorResources as any).EnergyUsed || 0);
+  const sponsorResources = await withRetry(() => getAccountResources(tronWeb, sponsorAddress));
+  const sponsorEnergy    = (sponsorResources.EnergyLimit || 0) - (sponsorResources.EnergyUsed || 0);
   if (sponsorEnergy < energyNeeded) {
     throw new Error(`Sponsor energy insufficient (${sponsorEnergy} available, ${energyNeeded} needed)`);
   }
@@ -354,25 +368,21 @@ export async function delegateEnergyToUser(userAddress: string, txCount = 1): Pr
 
   console.log(`[sponsor] Delegating ${delegateSun} sun ENERGY from ${sponsorAddress} to ${userAddress}`);
 
-  const tx = await withRetry(() => (tronWeb.transactionBuilder as any).delegateResource(
-    delegateSun, userAddress, "ENERGY", sponsorAddress, false,
-  ));
+  const tx = await withRetry(() =>
+    buildDelegateResourceTx(tronWeb, delegateSun, userAddress, "ENERGY", sponsorAddress, false),
+  );
   const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
-  // TronWeb's typings for transactionBuilder.delegateResource / trx.sign /
-  // trx.sendRawTransaction are too narrow (they expect SignedTransaction<ContractParamter>
-  // but the builder returns an `unknown` / loosely-typed object). Cast at the call
-  // boundary — runtime shape is correct.
-  const signedTx = await tronWeb.trx.sign(tx as any, pk);
-  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx as any));
+  const signedTx = await signTx(tronWeb, tx, pk);
+  const result   = await withRetry(() => broadcast(tronWeb, signedTx));
 
-  if ((result as any).result !== true) throw new Error(`Delegation failed — ${decodeTronError(result)}`);
-  console.log(`[sponsor] Delegation tx: ${(result as any).txid} — waiting 6 s…`);
+  if (result.result !== true) throw new Error(`Delegation failed — ${decodeTronError(result)}`);
+  console.log(`[sponsor] Delegation tx: ${result.txid} — waiting 6 s…`);
   await new Promise((r) => setTimeout(r, 6_000));
 }
 
 /** Decode a TronGrid hex error message to a human-readable string. */
-function decodeTronError(result: any): string {
-  const code: string = result?.code ?? "";
+function decodeTronError(result: AnyBroadcastReturn): string {
+  const code: string = result?.code != null ? String(result.code) : "";
   const msgHex: string = result?.message ?? "";
   let msg = "";
   try {
@@ -388,27 +398,26 @@ function decodeTronError(result: any): string {
  */
 export async function getUserAvailableEnergy(userAddress: string): Promise<number> {
   const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
-  const resources = await withRetry(() => tronWeb.trx.getAccountResources(userAddress));
-  const limit = ((resources as any).EnergyLimit ?? 0) as number;
-  const used  = ((resources as any).EnergyUsed  ?? 0) as number;
+  const resources = await withRetry(() => getAccountResources(tronWeb, userAddress));
+  const limit = resources.EnergyLimit ?? 0;
+  const used  = resources.EnergyUsed  ?? 0;
   return Math.max(0, limit - used);
 }
 
 export async function broadcastSignedTx(signedTx: object): Promise<{ txid: string }> {
   const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
-  // TronWeb's sendRawTransaction expects SignedTransaction<ContractParamter>, but
-  // we accept any pre-signed tx object from the caller. Runtime shape is correct.
-  const result  = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx as any));
+  // Caller passes a pre-signed tx object whose exact contract shape is not
+  // known at this boundary, so we use the type-erased broadcast helper.
+  const result  = await withRetry(() => broadcastUnknown(tronWeb, signedTx));
 
   // TronGrid returns { result: true, txid } on success,
   // or { result: false, code: "TAPOS_ERROR", message: "<hex>" } on failure.
   // It can also return { code: "...", message: "..." } without a result field.
-  const ok = (result as any).result === true;
-  if (!ok) {
+  if (result.result !== true) {
     const errMsg = decodeTronError(result);
     throw new Error(`Broadcast rejected by network — ${errMsg}`);
   }
-  return { txid: (result as any).txid };
+  return { txid: result.txid };
 }
 
 /**
@@ -431,7 +440,7 @@ export async function confirmTxSuccess(
   while (Date.now() - start < timeoutMs) {
     let info: any = null;
     try {
-      info = await tronWeb.trx.getTransactionInfo(txid);
+      info = await getTransactionInfo(tronWeb, txid);
     } catch {
       // Network blip — keep polling
     }
