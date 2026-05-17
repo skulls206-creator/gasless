@@ -48,6 +48,12 @@ CHANGES.md          Append-only changelog, one entry per merged change
 - **Human still owns**: enabling GH Pages source = "GitHub Actions",
   setting the `GASLESS_API_BASE_URL` repo variable, and the DNS
   `gasless.khurk.xyz → skulls206-creator.github.io` CNAME.
+  - **Update 2026-05-17**: `pnpm-lock.yaml` was stale vs.
+    `pnpm-workspace.yaml` overrides — both deploy workflow runs failed
+    at `pnpm install --frozen-lockfile`. Lockfile regenerated at sha
+    `9883ac6`. If builds still fail after GH Actions source is enabled,
+    run `pnpm install --no-frozen-lockfile` locally and commit the
+    updated lockfile.
 
 ## Build identity
 

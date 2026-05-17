@@ -12,6 +12,14 @@ If an agent ships multiple changes in a day, add multiple entries.
 
 ---
 
+## 2026-05-17 — Fix pnpm-lock.yaml staleness blocking CI builds  (sha: 9883ac6)
+**Satoshi.** The lockfile didn't match pnpm-workspace.yaml overrides,
+causing `pnpm install --frozen-lockfile` to exit 1 in both
+deploy-pages.yml workflow runs (#1 at 2a889ec, #2 at 13e99d8).
+Regenerated lockfile, verified local build succeeds. Frontend now
+needs GH Pages source set to "GitHub Actions" (manual repo setting)
+to serve from workflow artifacts.
+
 ## 2026-05-17 — Tighten error typing in TRON + push routes  (sha: 4c5b9f2)
 **Replit Agent.** Task #20. Replaced remaining `err: any` catches in
 `routes/tron.ts` and `routes/push.ts` with `err: unknown` + the shared
