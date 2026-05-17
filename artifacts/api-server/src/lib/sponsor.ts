@@ -11,6 +11,7 @@ import {
   getTransactionInfo,
   signTx,
   type AnyBroadcastReturn,
+  type TransactionInfo,
   type TronWebClient,
 } from "./tronweb-types.js";
 
@@ -438,7 +439,7 @@ export async function confirmTxSuccess(
   const pollMs  = 1_500;
 
   while (Date.now() - start < timeoutMs) {
-    let info: any = null;
+    let info: TransactionInfo | null = null;
     try {
       info = await getTransactionInfo(tronWeb, txid);
     } catch {
@@ -447,9 +448,9 @@ export async function confirmTxSuccess(
 
     // Empty object = not yet indexed by TronGrid — keep polling
     if (info && info.id) {
-      const receipt: any   = info.receipt ?? {};
-      const energyUsed     = (receipt.energy_usage_total ?? receipt.energy_usage ?? 0) as number;
-      const netUsed        = (receipt.net_usage ?? 0) as number;
+      const receipt        = info.receipt ?? ({} as TransactionInfo["receipt"]);
+      const energyUsed     = receipt.energy_usage_total ?? receipt.energy_usage ?? 0;
+      const netUsed        = receipt.net_usage ?? 0;
       // receipt.result is "SUCCESS" / "OUT_OF_ENERGY" / "REVERT" / "OUT_OF_TIME" / etc.
       // info.result === "FAILED" is set when execution failed.
       const receiptResult: string | undefined = receipt.result;
@@ -484,12 +485,12 @@ export async function confirmTxSuccess(
 }
 
 /** Extract a human-readable revert reason from a getTransactionInfo response. */
-function decodeContractRevertMessage(info: any): string | null {
+function decodeContractRevertMessage(info: TransactionInfo): string | null {
   // Standard Solidity revert string lives in contractResult[0] as ABI-encoded bytes
-  const cr: string | undefined = info?.contractResult?.[0];
+  const cr: string | undefined = info.contractResult?.[0];
   if (!cr) {
     // Fall back to resMessage from older nodes
-    const rm: string | undefined = info?.resMessage;
+    const rm: string | undefined = info.resMessage;
     if (rm) {
       try {
         return Buffer.from(rm, "hex").toString("utf8").replace(/\x00/g, "").trim() || null;
