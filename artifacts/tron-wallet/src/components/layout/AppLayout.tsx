@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { InstallPWA } from "@/components/ui/InstallPWA";
+import { BUILD_ID } from "@/lib/api";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -69,6 +70,12 @@ export function AppLayout({ children }: AppLayoutProps) {
       </main>
 
       <InstallPWA />
+
+      {/* Build identity — paste this in bug reports so the AI builders can
+          verify they're looking at the right commit. */}
+      <div className="fixed bottom-24 right-3 z-40 text-[10px] text-muted-foreground/50 font-mono pointer-events-none select-text">
+        build {BUILD_ID}
+      </div>
 
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6 bg-gradient-to-t from-background via-background/95 to-transparent pointer-events-none">

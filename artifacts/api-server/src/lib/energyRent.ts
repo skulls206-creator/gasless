@@ -28,10 +28,9 @@
 const FEEE_BASE = "https://feee.io/open";
 const ERP_BASE  = "https://api.tronenergyrent.com";
 
-// USDT transfer to a fresh recipient costs ~31k base energy plus a ~17k
-// SSTORE penalty (TIP-491), and TronWeb adds ~30% headroom. Renting 130k
-// guarantees we cover both first-time-recipient sends and repeat sends.
-const MIN_ENERGY_FOR_USDT = 130_000;
+// Single source of truth lives in sponsor.ts so admin status, readiness
+// checks, and rental sizing never drift apart.
+import { MIN_ENERGY_FOR_USDT } from "./sponsor.js";
 
 export interface RentalResult {
   success: boolean;

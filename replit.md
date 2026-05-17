@@ -100,6 +100,27 @@ A fully browser-side gasless USDT (TRC-20) wallet on the TRON network.
 - `@tanstack/react-query` — Data fetching + caching
 - `wouter` — Client-side routing
 
+## Deployment split (multi-agent collaboration)
+
+- **Frontend** ships to GitHub Pages at `gasless.khurk.xyz` via
+  `.github/workflows/deploy-pages.yml`. CNAME lives at
+  `artifacts/tron-wallet/public/CNAME`.
+- **Backend** stays on Replit. CORS now uses an allowlist —
+  `ALLOWED_ORIGINS` (comma-separated) or back-compat `ALLOWED_ORIGIN`.
+- **Frontend → backend wiring**: `VITE_API_BASE_URL` build-time env
+  (set as repo variable `GASLESS_API_BASE_URL`) drives the
+  `apiUrl()` helper in `src/lib/api.ts`. All frontend fetches go
+  through this helper — no raw `fetch("/api/...")`. In dev it's empty
+  so relative paths still work.
+- **Build identity**: every build is tagged with the git short SHA.
+  Frontend: `__BUILD_ID__` injected via Vite `define` in
+  `vite.config.ts`, exposed as `BUILD_ID` from `src/lib/api.ts`,
+  shown in AppLayout footer + Welcome page. Backend:
+  `GET /api/version` returns `{ buildId, buildTime, bootTime }`.
+- **Cross-agent rules** live in `AGENTS.md` (root).
+- **Changelog** lives in `CHANGES.md` (root). Append one entry per
+  merged change with the git short SHA.
+
 ## Backend API (`artifacts/api-server`)
 
 ### Public Endpoints (no auth required)
@@ -152,6 +173,8 @@ Rental is **only attempted** when `ENERGY_RENT_API_KEY` is set. Without it, tier
 | `SPONSOR_PRIVATE_KEY` | Yes | Sponsor wallet private key |
 | `SPONSOR_ADDRESS` | Yes | Sponsor wallet base58 address |
 | `ADMIN_SECRET` | No | Protects `/api/admin/*` endpoints |
+| `ALLOWED_ORIGINS` | No | Comma-separated CORS allowlist (e.g. `https://gasless.khurk.xyz`). Required when frontend is on GH Pages. |
+| `BUILD_ID` | No | Override git SHA for `/api/version` (set by CI) |
 | `TRONGRID_API_KEY` | No | TronGrid Pro API key (reduces 429s) |
 | `ENERGY_RENT_API_KEY` | No | Activates rental tier; required for both `feee` and `erp` |
 | `ENERGY_RENT_PROVIDER` | No | `"feee"` (default) or `"erp"` |

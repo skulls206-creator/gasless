@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Wallet, KeyRound, ShieldCheck, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
+import { BUILD_ID } from "@/lib/api";
 
 export function Welcome() {
   return (
@@ -85,6 +86,10 @@ export function Welcome() {
           <ShieldCheck className="w-4 h-4 text-success" />
           <span>Keys never leave your device. 100% self-custodial.</span>
         </motion.div>
+
+        <div className="mt-4 text-[10px] text-muted-foreground/50 font-mono text-center select-text">
+          build {BUILD_ID}
+        </div>
       </div>
     </div>
   );

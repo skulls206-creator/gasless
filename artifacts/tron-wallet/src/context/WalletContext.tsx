@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { getTronWeb } from "@/lib/tron";
+import { apiUrl } from "@/lib/api";
 import {
   sha256Hex,
   encryptPrivateKey,
@@ -15,7 +16,7 @@ const PIN_MAX_ATTEMPTS  = 10;
 async function syncWalletToServer(accountNum: string, encryptedPk: string, address: string) {
   try {
     const accountHash = await sha256Hex(accountNum);
-    await fetch("/api/wallet/sync", {
+    await fetch(apiUrl("/api/wallet/sync"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accountHash, encryptedPk, address }),

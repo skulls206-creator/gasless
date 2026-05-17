@@ -22,25 +22,53 @@ async function withRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> {
   throw lastErr;
 }
 
-// Matches energyRent.ts — USDT transfer + SSTORE penalty + headroom.
-const MIN_ENERGY_FOR_USDT = 130_000;
-// A USDT TRC-20 transfer to a non-zero recipient burns ~27–30k energy at
-// ~100 SUN/energy = ~2.7–3.0 TRX, plus ~0.3 TRX bandwidth. TRON also
-// applies an *escalating energy penalty* after repeated OUT_OF_ENERGY
-// failures from the same address (observed +7k → +17k → +26k), so worst
-// case is ~56k energy = ~5.6 TRX burn. We send 8 TRX to comfortably
-// cover the worst case; unused TRX stays in the user wallet.
-const TRX_TOPUP_AMOUNT_SUN = 8_000_000;   // 8 TRX sent to user
-const TRX_TOPUP_THRESHOLD_SUN = 7_000_000; // top-up unless user already has ≥7 TRX
-const TRX_SPONSOR_RESERVE_SUN = 5_000_000; // always keep 5 TRX in sponsor wallet
+// ── Resource budget — single source of truth ──────────────────────────────
+// One TRC-20 USDT transfer burns ~31k energy + ~17k SSTORE penalty
+// (TIP-491, first-time recipients), and TRON applies an escalating penalty
+// after repeated OUT_OF_ENERGY reverts. 130k covers worst case with
+// TronWeb's ~30% headroom. Exported so energyRent.ts/gasless.ts/admin
+// status all agree.
+export const MIN_ENERGY_FOR_USDT = 130_000;
 
-// Even when energy is rented/delegated, TRON requires the user wallet to
-// have actual TRX in order to broadcast a smart-contract tx — the network
-// burns ~0.345 TRX of bandwidth for a TRC-20 transfer (~345 bytes × 1000
-// SUN/byte). With 0 TRX the broadcast is rejected with BANDWITH_ERROR
-// even though energy is fine. Keep a small float to cover this.
-const TRX_BANDWIDTH_FLOOR_SUN  = 1_500_000; // top up if user has <1.5 TRX
-const TRX_BANDWIDTH_TOPUP_SUN  = 2_000_000; // send 2 TRX (covers ~5 TRC-20 broadcasts)
+// Bandwidth burn per TRC-20 transfer is ~345 bytes × 1000 SUN/byte ≈
+// 0.345 TRX. Round up to 0.5 TRX/tx as a safety floor.
+const BANDWIDTH_BURN_PER_TX_SUN = 500_000;
+
+// Pad every top-up by 1 TRX over the computed minimum to absorb chain
+// param changes and rounding error.
+const READINESS_SAFETY_PAD_SUN = 1_000_000;
+
+// Never drain sponsor wallet below this reserve.
+const TRX_SPONSOR_RESERVE_SUN = 5_000_000; // 5 TRX
+
+// How long to poll for the top-up tx to land on-chain.
+const TOPUP_SETTLE_TIMEOUT_MS = 30_000;
+const TOPUP_SETTLE_POLL_MS    = 1_500;
+
+// Cache the chain's energy unit price (SUN/energy) for 5 min to avoid
+// hammering getChainParameters on every send.
+let energyFeeCache: { sun: number; fetchedAt: number } | null = null;
+const ENERGY_FEE_TTL_MS = 5 * 60_000;
+// Hard fallback if chain params ever fail — current mainnet value as of May 2026.
+const ENERGY_FEE_FALLBACK_SUN = 210;
+
+async function getEnergyFeeSun(): Promise<number> {
+  const now = Date.now();
+  if (energyFeeCache && now - energyFeeCache.fetchedAt < ENERGY_FEE_TTL_MS) {
+    return energyFeeCache.sun;
+  }
+  try {
+    const tronWeb = getSponsorTronWeb() ?? new TronWeb({ fullHost: TRONGRID });
+    const params: any[] = await withRetry(() => tronWeb.trx.getChainParameters());
+    const fee = params.find((p) => p?.key === "getEnergyFee")?.value;
+    const sun = typeof fee === "number" && fee > 0 ? fee : ENERGY_FEE_FALLBACK_SUN;
+    energyFeeCache = { sun, fetchedAt: now };
+    return sun;
+  } catch (err: any) {
+    console.warn(`[sponsor] getChainParameters failed: ${err.message} — using ${ENERGY_FEE_FALLBACK_SUN} SUN/energy fallback`);
+    return ENERGY_FEE_FALLBACK_SUN;
+  }
+}
 
 function normalizePk(pk: string): string {
   return pk.startsWith("0x") || pk.startsWith("0X") ? pk.slice(2) : pk;
@@ -126,108 +154,178 @@ export async function stakeTRXForEnergy(amountTRX: number): Promise<{ txid: stri
   return { txid: (result as any).txid };
 }
 
-/**
- * Top-up a user's TRX balance so they can pay the network fee for a USDT
- * transfer.  Only transfers if the user's balance is below the threshold.
- * The ~$0.05–0.12 cost is covered by the $1 service fee collected per send.
- */
-export async function topUpUserTRX(
-  userAddress: string,
-): Promise<{ topped: boolean; amountTRX?: number; txid?: string }> {
-  const tronWeb       = getSponsorTronWeb();
-  const sponsorAddress = getSponsorAddress();
-  if (!tronWeb || !sponsorAddress) throw new Error("Sponsor wallet not configured");
+// ── Pre-broadcast resource readiness ───────────────────────────────────────
 
-  // Check user TRX balance
-  const userAccount   = await withRetry(() => tronWeb.trx.getAccount(userAddress));
-  const userBalanceSun: number = (userAccount as any).balance ?? 0;
-
-  if (userBalanceSun >= TRX_TOPUP_THRESHOLD_SUN) {
-    console.log(`[sponsor] User ${userAddress} has ${userBalanceSun / 1e6} TRX — no top-up needed`);
-    return { topped: false };
-  }
-
-  // Check sponsor has enough TRX to spare
-  const sponsorAccount   = await withRetry(() => tronWeb.trx.getAccount(sponsorAddress));
-  const sponsorBalanceSun: number = (sponsorAccount as any).balance ?? 0;
-
-  if (sponsorBalanceSun < TRX_TOPUP_AMOUNT_SUN + TRX_SPONSOR_RESERVE_SUN) {
-    throw new Error(
-      `Sponsor TRX low (${(sponsorBalanceSun / 1e6).toFixed(2)} TRX). ` +
-      "Please top up the sponsor wallet.",
-    );
-  }
-
-  console.log(
-    `[sponsor] Topping up ${TRX_TOPUP_AMOUNT_SUN / 1e6} TRX to ${userAddress} ` +
-    `(user had ${userBalanceSun / 1e6} TRX)`,
-  );
-
-  const tx       = await withRetry(() => tronWeb.transactionBuilder.sendTrx(userAddress, TRX_TOPUP_AMOUNT_SUN, sponsorAddress));
-  const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
-  const signedTx = await tronWeb.trx.sign(tx, pk);
-  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
-
-  if ((result as any).result !== true) {
-    throw new Error(`TRX top-up failed — ${decodeTronError(result)}`);
-  }
-
-  const txid = (result as any).txid as string;
-  console.log(`[sponsor] TRX top-up tx: ${txid} — waiting 3 s…`);
-  await new Promise((r) => setTimeout(r, 3_000));
-
-  return { topped: true, amountTRX: TRX_TOPUP_AMOUNT_SUN / 1e6, txid };
+export interface ReadinessResult {
+  ok: boolean;
+  /** Human-readable reason when ok=false. */
+  reason?: string;
+  /** Top-up tx hash if a TRX transfer was sent to close the gap. */
+  topUpTxid?: string;
+  topUpAmountTRX?: number;
+  /** Diagnostics (always populated, useful for logging + admin status). */
+  diagnostics: {
+    energyAvailable: number;
+    energyRequired: number;
+    energyFeeSun: number;
+    trxAvailableSun: number;
+    trxRequiredSun: number;
+    sponsorBalanceSun?: number;
+  };
 }
 
 /**
- * Ensure the user wallet has at least TRX_BANDWIDTH_FLOOR_SUN so the
- * smart-contract broadcast doesn't fail with BANDWITH_ERROR. Required even
- * when energy is rented, because TRON validates that the wallet can
- * actually pay the bandwidth burn before accepting the tx.
+ * Guarantee that `userAddress` has enough on-chain resources to broadcast
+ * `txCount` TRC-20 transfers RIGHT NOW.
+ *
+ * Resource model (per tx):
+ *   - Energy:    MIN_ENERGY_FOR_USDT (delegated OR burned from user TRX)
+ *   - Bandwidth: BANDWIDTH_BURN_PER_TX_SUN (always burned from user TRX)
+ *
+ * Required user TRX = (energy_gap × energyFee) + (bandwidthBurn × txCount) + pad
+ * where energy_gap = max(0, energyRequired − energyAvailable).
+ *
+ * If user TRX is short, sends the gap from sponsor wallet and polls
+ * user balance until the transfer settles on-chain (no setTimeout race).
+ *
+ * Returns ok=false (does NOT throw) if sponsor cannot cover the gap or
+ * the top-up tx doesn't settle in time — caller decides how to surface
+ * to the client (e.g. HTTP 503).
  */
-export async function ensureUserHasBandwidthTRX(
+export async function ensureUserReadyForSend(
   userAddress: string,
-): Promise<{ topped: boolean; amountTRX?: number; txid?: string }> {
+  txCount = 1,
+): Promise<ReadinessResult> {
   const tronWeb        = getSponsorTronWeb();
   const sponsorAddress = getSponsorAddress();
-  if (!tronWeb || !sponsorAddress) throw new Error("Sponsor wallet not configured");
-
-  const userAccount    = await withRetry(() => tronWeb.trx.getAccount(userAddress));
-  const userBalanceSun: number = (userAccount as any).balance ?? 0;
-
-  if (userBalanceSun >= TRX_BANDWIDTH_FLOOR_SUN) {
-    return { topped: false };
+  if (!tronWeb || !sponsorAddress) {
+    throw new Error("Sponsor wallet not configured");
   }
 
+  const energyFeeSun = await getEnergyFeeSun();
+
+  // Snapshot user resources + balance in parallel.
+  const [userAccount, userResources] = await Promise.all([
+    withRetry(() => tronWeb.trx.getAccount(userAddress)),
+    withRetry(() => tronWeb.trx.getAccountResources(userAddress)),
+  ]);
+  const trxAvailableSun: number = (userAccount as any).balance ?? 0;
+  const energyLimit:     number = (userResources as any).EnergyLimit ?? 0;
+  const energyUsed:      number = (userResources as any).EnergyUsed  ?? 0;
+  const energyAvailable        = Math.max(0, energyLimit - energyUsed);
+
+  const energyRequired = MIN_ENERGY_FOR_USDT * txCount;
+  const energyGap      = Math.max(0, energyRequired - energyAvailable);
+  const burnSun        = energyGap * energyFeeSun;
+  const bandwidthSun   = BANDWIDTH_BURN_PER_TX_SUN * txCount;
+  const trxRequiredSun = burnSun + bandwidthSun + READINESS_SAFETY_PAD_SUN;
+
+  const diagnostics = {
+    energyAvailable,
+    energyRequired,
+    energyFeeSun,
+    trxAvailableSun,
+    trxRequiredSun,
+  };
+
+  // Fast path — user already has everything they need.
+  if (trxAvailableSun >= trxRequiredSun) {
+    console.log(
+      `[sponsor] Readiness OK for ${userAddress}: ` +
+      `energy ${energyAvailable}/${energyRequired}, ` +
+      `TRX ${(trxAvailableSun / 1e6).toFixed(3)}/${(trxRequiredSun / 1e6).toFixed(3)}`,
+    );
+    return { ok: true, diagnostics };
+  }
+
+  // Sponsor must cover the gap.
+  const gapSun         = trxRequiredSun - trxAvailableSun;
   const sponsorAccount = await withRetry(() => tronWeb.trx.getAccount(sponsorAddress));
   const sponsorBalanceSun: number = (sponsorAccount as any).balance ?? 0;
+  diagnostics.trxRequiredSun = trxRequiredSun;
+  const diag = { ...diagnostics, sponsorBalanceSun };
 
-  if (sponsorBalanceSun < TRX_BANDWIDTH_TOPUP_SUN + TRX_SPONSOR_RESERVE_SUN) {
-    throw new Error(
-      `Sponsor TRX low (${(sponsorBalanceSun / 1e6).toFixed(2)} TRX). ` +
-      "Cannot fund bandwidth top-up — please refill the sponsor wallet.",
-    );
+  if (sponsorBalanceSun < gapSun + TRX_SPONSOR_RESERVE_SUN) {
+    return {
+      ok: false,
+      reason:
+        `Sponsor wallet cannot cover top-up: need ${(gapSun / 1e6).toFixed(3)} TRX ` +
+        `(+${(TRX_SPONSOR_RESERVE_SUN / 1e6).toFixed(1)} TRX reserve), ` +
+        `sponsor has ${(sponsorBalanceSun / 1e6).toFixed(3)} TRX.`,
+      diagnostics: diag,
+    };
   }
 
   console.log(
-    `[sponsor] Bandwidth top-up: sending ${TRX_BANDWIDTH_TOPUP_SUN / 1e6} TRX to ${userAddress} ` +
-    `(had ${(userBalanceSun / 1e6).toFixed(4)} TRX)`,
+    `[sponsor] Top-up needed for ${userAddress}: ` +
+    `sending ${(gapSun / 1e6).toFixed(3)} TRX ` +
+    `(energy gap ${energyGap} × ${energyFeeSun} SUN = ${(burnSun / 1e6).toFixed(3)} TRX + ` +
+    `bandwidth ${(bandwidthSun / 1e6).toFixed(3)} TRX + pad ${(READINESS_SAFETY_PAD_SUN / 1e6).toFixed(1)} TRX)`,
   );
 
-  const tx       = await withRetry(() => tronWeb.transactionBuilder.sendTrx(userAddress, TRX_BANDWIDTH_TOPUP_SUN, sponsorAddress));
-  const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
-  const signedTx = await tronWeb.trx.sign(tx, pk);
-  const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
+  // Build → sign → broadcast TRX transfer.
+  let topUpTxid: string;
+  try {
+    const tx       = await withRetry(() =>
+      tronWeb.transactionBuilder.sendTrx(userAddress, gapSun, sponsorAddress),
+    );
+    const pk       = normalizePk(process.env.SPONSOR_PRIVATE_KEY!.trim());
+    const signedTx = await tronWeb.trx.sign(tx, pk);
+    const result   = await withRetry(() => tronWeb.trx.sendRawTransaction(signedTx));
 
-  if ((result as any).result !== true) {
-    throw new Error(`Bandwidth top-up failed — ${decodeTronError(result)}`);
+    if ((result as any).result !== true) {
+      return {
+        ok: false,
+        reason: `TRX top-up rejected: ${decodeTronError(result)}`,
+        diagnostics: diag,
+      };
+    }
+    topUpTxid = (result as any).txid as string;
+  } catch (err: any) {
+    return {
+      ok: false,
+      reason: `TRX top-up broadcast failed: ${err.message ?? String(err)}`,
+      diagnostics: diag,
+    };
   }
 
-  const txid = (result as any).txid as string;
-  console.log(`[sponsor] Bandwidth top-up tx: ${txid} — waiting 3 s for confirmation…`);
-  await new Promise((r) => setTimeout(r, 3_000));
+  // Poll user balance until the top-up actually lands on-chain — DO NOT
+  // rely on a fixed setTimeout. A pre-existing bug where the main tx
+  // raced ahead of an unsettled top-up was the root cause of repeated
+  // OUT_OF_ENERGY reverts.
+  const targetSun = trxAvailableSun + gapSun - (READINESS_SAFETY_PAD_SUN / 2); // tolerate slight under-settlement
+  const start     = Date.now();
+  while (Date.now() - start < TOPUP_SETTLE_TIMEOUT_MS) {
+    await new Promise((r) => setTimeout(r, TOPUP_SETTLE_POLL_MS));
+    try {
+      const acct: any = await tronWeb.trx.getAccount(userAddress);
+      const bal: number = acct.balance ?? 0;
+      if (bal >= targetSun) {
+        console.log(
+          `[sponsor] Top-up settled in ${Date.now() - start}ms ` +
+          `(tx ${topUpTxid}, balance ${(bal / 1e6).toFixed(3)} TRX)`,
+        );
+        return {
+          ok: true,
+          topUpTxid,
+          topUpAmountTRX: gapSun / 1e6,
+          diagnostics: { ...diag, trxAvailableSun: bal },
+        };
+      }
+    } catch {
+      // Network blip — keep polling
+    }
+  }
 
-  return { topped: true, amountTRX: TRX_BANDWIDTH_TOPUP_SUN / 1e6, txid };
+  return {
+    ok: false,
+    reason:
+      `Top-up tx ${topUpTxid} not settled within ${TOPUP_SETTLE_TIMEOUT_MS / 1000}s. ` +
+      "Check Tronscan; the send was aborted before broadcast to avoid an OUT_OF_ENERGY revert.",
+    topUpTxid,
+    topUpAmountTRX: gapSun / 1e6,
+    diagnostics: diag,
+  };
 }
 
 /** Legacy energy delegation — still used if sponsor has high energy staked. */

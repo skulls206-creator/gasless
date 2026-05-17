@@ -2,8 +2,23 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import { execSync } from "child_process";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { VitePWA } from "vite-plugin-pwa";
+
+// Build identity — short git SHA + ISO timestamp baked into the bundle
+// so the running app can report exactly which commit it came from
+// (Settings → About). Falls back gracefully when git is unavailable.
+function gitShortSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString().trim() || "unknown";
+  } catch {
+    return process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown";
+  }
+}
+const BUILD_ID = process.env.BUILD_ID ?? gitShortSha();
+const BUILD_TIME = new Date().toISOString();
 
 // PORT and BASE_PATH are only needed for the dev/preview server, not for
 // production builds. Provide safe defaults so `vite build` succeeds in CI.
@@ -16,6 +31,10 @@ const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
   plugins: [
     react(),
     tailwindcss(),

@@ -1,0 +1,73 @@
+name: Deploy Gasless frontend to GitHub Pages
+
+# Triggers:
+#   - any push to main that touches the wallet or shared deps
+#   - manual run from the Actions tab
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "artifacts/tron-wallet/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+# One concurrent deploy. Skip in-flight runs if a newer push arrives.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed for git rev-parse in vite.config.ts
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build wallet
+        env:
+          # Custom domain → app served at root.
+          BASE_PATH: /
+          # Points the deployed frontend at the Replit-hosted API. Set this
+          # as a repo secret/var named GASLESS_API_BASE_URL — e.g.
+          # https://gasless-api.<your-replit-username>.replit.app
+          VITE_API_BASE_URL: ${{ vars.GASLESS_API_BASE_URL }}
+        run: pnpm --filter @workspace/tron-wallet run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/tron-wallet/dist/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,4 +1,5 @@
 import { TronWeb } from "tronweb";
+import { apiUrl } from "@/lib/api";
 
 export const USDT_CONTRACT_ADDRESS = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 export const TRONGRID_API_URL = "https://api.trongrid.io";
@@ -24,7 +25,7 @@ function encodeAddressParam(tronWeb: InstanceType<typeof TronWeb>, address: stri
  */
 export async function getUSDTBalance(address: string): Promise<number> {
   try {
-    const res = await fetch(`/api/tron/balance/${address}`);
+    const res = await fetch(apiUrl(`/api/tron/balance/${address}`));
     if (!res.ok) return 0;
     const json = await res.json();
     return typeof json.balance === "number" ? json.balance : 0;
@@ -67,7 +68,7 @@ export async function buildAndSignUSDTTransfer(
   amount: number,
 ): Promise<object> {
   // Step 1 — ask the backend to build the raw unsigned transaction
-  const buildRes = await fetch("/api/tron/build-transfer", {
+  const buildRes = await fetch(apiUrl("/api/tron/build-transfer"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fromAddress, toAddress, amount }),

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatAccountNumberInput } from "@/lib/utils";
 import { sha256Hex } from "@/lib/crypto";
+import { apiUrl } from "@/lib/api";
 import { KeyRound, ArrowRight, ArrowLeft, ServerCrash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -31,7 +32,7 @@ export function RecoverWallet() {
     try {
       const hash = await sha256Hex(accountNum);
 
-      const res = await fetch("/api/wallet/recover", {
+      const res = await fetch(apiUrl("/api/wallet/recover"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountHash: hash }),

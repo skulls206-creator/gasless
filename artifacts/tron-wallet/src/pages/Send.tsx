@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
 import { useUSDTBalance, useTronResources, useSendUSDT, useAppConfig } from "@/hooks/use-tron";
 import { validateAddress } from "@/lib/tron";
+import { apiUrl } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +30,7 @@ function useSponsorStatus() {
   return useQuery({
     queryKey: ["sponsor-status"],
     queryFn: async () => {
-      const res = await fetch("/api/sponsor-info");
+      const res = await fetch(apiUrl("/api/sponsor-info"));
       if (!res.ok) return { configured: false };
       return res.json();
     },
@@ -42,7 +43,7 @@ function useTrxPrice() {
   return useQuery({
     queryKey: ["trx-price"],
     queryFn: async () => {
-      const res = await fetch("/api/trx-price");
+      const res = await fetch(apiUrl("/api/trx-price"));
       if (!res.ok) return null;
       const data = await res.json();
       return typeof data.usd === "number" ? data.usd : null;
@@ -167,7 +168,16 @@ export function Send() {
         onSuccess: (result) => {
           setTxHash(result.txid);
           setWasSponsored(result.sponsored);
-          toast({ title: "Transaction Sent!" });
+          if (result.feeError) {
+            // Main tx succeeded but the $1 service-fee transfer didn't land.
+            // Surface clearly so the user knows the fee was NOT charged.
+            toast({
+              title: "Transaction Sent (fee skipped)",
+              description: `Your USDT was delivered. The $${feeAmount} service fee was not charged: ${result.feeError}`,
+            });
+          } else {
+            toast({ title: "Transaction Sent!" });
+          }
         },
         onError: (err: any) => {
           // Server attaches txid when broadcast succeeded but on-chain

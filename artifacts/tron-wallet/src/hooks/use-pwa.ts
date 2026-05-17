@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { apiUrl } from "@/lib/api";
 
 // ── Install Prompt ────────────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ export function usePushNotifications(address: string | null) {
     if (!address) return;
     setState("loading");
     try {
-      const keyRes = await fetch("/api/push/vapid-key");
+      const keyRes = await fetch(apiUrl("/api/push/vapid-key"));
       const { publicKey } = await keyRes.json();
 
       const reg = await navigator.serviceWorker.ready;
@@ -78,7 +79,7 @@ export function usePushNotifications(address: string | null) {
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
 
-      await fetch("/api/push/subscribe", {
+      await fetch(apiUrl("/api/push/subscribe"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address, subscription: sub.toJSON() }),
@@ -96,7 +97,7 @@ export function usePushNotifications(address: string | null) {
     if (!subscription) return;
     setState("loading");
     try {
-      await fetch("/api/push/unsubscribe", {
+      await fetch(apiUrl("/api/push/unsubscribe"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint: subscription.endpoint }),

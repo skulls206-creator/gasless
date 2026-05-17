@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ShieldAlert, Key, Copy, Eye, EyeOff, Bell, BellOff, BellRing, Loader2, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAccountNumberInput } from "@/lib/utils";
+import { apiUrl } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ export function Backup() {
 
         // Ask the server if this endpoint is registered as admin
         try {
-          const res = await fetch("/api/push/admin-status", {
+          const res = await fetch(apiUrl("/api/push/admin-status"), {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -132,7 +133,7 @@ export function Backup() {
       }
 
       // Get VAPID key and create subscription
-      const keyRes = await fetch("/api/push/vapid-key");
+      const keyRes = await fetch(apiUrl("/api/push/vapid-key"));
       if (!keyRes.ok) throw new Error("Could not fetch VAPID key");
       const { publicKey } = await keyRes.json();
 
@@ -142,7 +143,7 @@ export function Backup() {
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
 
-      const res = await fetch("/api/push/admin-subscribe", {
+      const res = await fetch(apiUrl("/api/push/admin-subscribe"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -173,7 +174,7 @@ export function Backup() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
-        await fetch("/api/push/unsubscribe", {
+        await fetch(apiUrl("/api/push/unsubscribe"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpoint: sub.endpoint }),

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { buildAndSignUSDTTransfer } from "@/lib/tron";
+import { apiUrl } from "@/lib/api";
 
 export interface TronResources {
   freeNetLimit: number;
@@ -29,7 +30,7 @@ export function useUSDTBalance(address: string | null) {
     queryKey: ["usdt-balance", address],
     queryFn: async () => {
       if (!address) return 0;
-      const res = await fetch(`/api/tron/balance/${encodeURIComponent(address)}`);
+      const res = await fetch(apiUrl(`/api/tron/balance/${encodeURIComponent(address)}`));
       if (!res.ok) return 0;
       const { balance } = await res.json();
       return typeof balance === "number" ? balance : 0;
@@ -45,7 +46,7 @@ export function useTronResources(address: string | null) {
     queryKey: ["tron-resources", address],
     queryFn: async () => {
       if (!address) throw new Error("No address");
-      const res = await fetch(`/api/tron/resources/${encodeURIComponent(address)}`);
+      const res = await fetch(apiUrl(`/api/tron/resources/${encodeURIComponent(address)}`));
       if (!res.ok) throw new Error(`Resources fetch failed (${res.status})`);
       return res.json();
     },
@@ -64,7 +65,7 @@ export function useUSDTTransactions(address: string | null) {
       if (!address) return { data: [] as Trc20Transaction[], meta: {} };
       let url = `/api/tron/transactions/${encodeURIComponent(address)}?limit=50`;
       if (pageParam) url += `&fingerprint=${encodeURIComponent(pageParam)}`;
-      const res = await fetch(url);
+      const res = await fetch(apiUrl(url));
       if (!res.ok) throw new Error(`Transaction fetch failed (${res.status})`);
       return res.json() as Promise<{ data: Trc20Transaction[]; meta: { fingerprint?: string } }>;
     },
@@ -83,7 +84,10 @@ export interface AppConfig {
 
 export interface GaslessSendResult {
   txid: string;
-  feeTxid?: string;
+  /** null when the fee tx could not be broadcast (see feeError). */
+  feeTxid?: string | null;
+  /** Set when the main tx succeeded but the $1 service-fee transfer failed. */
+  feeError?: string;
   sponsored: boolean;
 }
 
@@ -91,7 +95,7 @@ export function useAppConfig() {
   return useQuery<AppConfig>({
     queryKey: ["app-config"],
     queryFn: async () => {
-      const res = await fetch("/api/config");
+      const res = await fetch(apiUrl("/api/config"));
       if (!res.ok) return { feeAmount: 1, feeRecipient: null, feesEnabled: false };
       return res.json();
     },
@@ -126,7 +130,7 @@ export function useSendUSDT() {
         signedFeeTx = await buildAndSignUSDTTransfer(privateKey, fromAddress, feeRecipient, feeAmount);
       }
 
-      const res = await fetch("/api/gasless-send", {
+      const res = await fetch(apiUrl("/api/gasless-send"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ signedTx, signedFeeTx, userAddress: fromAddress }),
