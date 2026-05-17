@@ -1,10 +1,10 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response as ExpressResponse, type NextFunction } from "express";
 import webpush from "web-push";
 import { db } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getTronGridHeaders } from "./tron.js";
-import { getSponsorStatus, isSponsorConfigured } from "../lib/sponsor.js";
+import { getSponsorStatus, isSponsorConfigured, errMessage } from "../lib/sponsor.js";
 
 const router: IRouter = Router();
 
@@ -37,10 +37,10 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 }
 
-function requireAdmin(req: any, res: any, next: any) {
+function requireAdmin(req: Request, res: ExpressResponse, next: NextFunction) {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) return next();
-  const provided = req.headers["x-admin-secret"] || req.query.secret;
+  const provided = req.headers["x-admin-secret"] ?? (req.query.secret as string | undefined);
   if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
   return next();
 }
@@ -157,7 +157,7 @@ router.post("/push/admin-status", requireAdmin, async (req, res) => {
       .limit(1);
 
     return res.json({ subscribed: !!row });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: "DB error" });
   }
 });
@@ -174,11 +174,17 @@ async function sendPush(
       JSON.stringify(payload),
     );
     return true;
-  } catch (err: any) {
-    if (err.statusCode === 410 || err.statusCode === 404) {
+  } catch (err: unknown) {
+    const statusCode =
+      err && typeof err === "object" && "statusCode" in err
+        ? (err as { statusCode?: unknown }).statusCode
+        : undefined;
+    if (statusCode === 410 || statusCode === 404) {
       await db
         .delete(pushSubscriptionsTable)
         .where(eq(pushSubscriptionsTable.endpoint, sub.endpoint));
+    } else {
+      console.error(`[push] sendPush failed for ${sub.endpoint}:`, errMessage(err));
     }
     return false;
   }
@@ -207,8 +213,14 @@ async function pollTransactions() {
         `${TRONGRID_API_URL}/v1/accounts/${sub.address}/transactions/trc20?contract_address=${USDT_CONTRACT}&limit=5&only_confirmed=true`,
       );
       if (!res.ok) continue;
-      const json: any = await res.json();
-      const txs: any[] = Array.isArray(json.data) ? json.data : [];
+      interface Trc20Tx {
+        transaction_id: string;
+        to?: string;
+        from?: string;
+        value?: string;
+      }
+      const json = (await res.json()) as { data?: Trc20Tx[] };
+      const txs: Trc20Tx[] = Array.isArray(json.data) ? json.data : [];
       if (txs.length === 0) continue;
 
       const latestTx = txs[0];
@@ -255,8 +267,9 @@ async function pollSponsorBalance() {
   if (!isSponsorConfigured()) return;
 
   try {
-    const status = await getSponsorStatus() as any;
+    const status = await getSponsorStatus();
     if (!status.configured) return;
+    if ("error" in status) return;
 
     const trxBalance: number = status.trxBalance ?? Infinity;
     const isCritical = trxBalance < LOW_TRX_THRESHOLD;
@@ -280,7 +293,7 @@ async function pollSponsorBalance() {
     if (adminSubs.length === 0) return;
 
     const trxRounded = trxBalance.toFixed(2);
-    const address    = (status.address as string) ?? "sponsor wallet";
+    const address    = status.address ?? "sponsor wallet";
     const short      = `${address.slice(0, 6)}…${address.slice(-4)}`;
 
     console.warn(

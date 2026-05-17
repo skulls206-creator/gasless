@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { TronWeb } from "tronweb";
+import { errMessage } from "../lib/sponsor.js";
 
 const TRONGRID_API_URL = "https://api.trongrid.io";
 const USDT_CONTRACT_ADDRESS = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
@@ -48,8 +49,8 @@ async function withTronRetry<T>(fn: () => Promise<T>, maxTries = 4): Promise<T> 
   for (let attempt = 1; attempt <= maxTries; attempt++) {
     try {
       return await fn();
-    } catch (err: any) {
-      const msg: string = err?.message ?? "";
+    } catch (err: unknown) {
+      const msg = errMessage(err);
       const is429 = msg.includes("429") || msg.includes("Too Many");
       if (!is429 || attempt >= maxTries) throw err;
       lastErr = err;
@@ -81,6 +82,10 @@ function base58ToHex(address: string): string | null {
   return hex.slice(0, 42);
 }
 
+interface TriggerConstantContractResponse {
+  constant_result?: string[];
+}
+
 router.get("/tron/balance/:address", async (req, res) => {
   const { address } = req.params;
   if (!address || address.length < 30) {
@@ -105,8 +110,8 @@ router.get("/tron/balance/:address", async (req, res) => {
       }),
     });
 
-    const json: any = await response.json();
-    const hex: string = json?.constant_result?.[0];
+    const json = (await response.json()) as TriggerConstantContractResponse;
+    const hex = json?.constant_result?.[0];
 
     if (!hex) {
       console.error("TronGrid balance error for", address, JSON.stringify(json).slice(0, 200));
@@ -121,6 +126,11 @@ router.get("/tron/balance/:address", async (req, res) => {
     return res.json({ balance: 0 });
   }
 });
+
+interface TriggerSmartContractResponse {
+  transaction?: unknown;
+  [key: string]: unknown;
+}
 
 // Build an unsigned USDT transfer transaction server-side so the browser
 // never calls TronGrid directly (avoids per-IP rate limits and 401s from
@@ -140,8 +150,16 @@ router.post("/tron/build-transfer", async (req, res) => {
     const tronWeb = getBackendTronWeb();
     const amountInSun = Math.floor(amount * 1_000_000).toString();
 
-    const result: any = await withTronRetry(() =>
-      (tronWeb.transactionBuilder as any).triggerSmartContract(
+    const result = (await withTronRetry(() =>
+      (tronWeb.transactionBuilder as unknown as {
+        triggerSmartContract: (
+          contract: string,
+          fn: string,
+          opts: { feeLimit: number; expiration: number },
+          params: Array<{ type: string; value: string }>,
+          issuer: string,
+        ) => Promise<TriggerSmartContractResponse>;
+      }).triggerSmartContract(
         USDT_CONTRACT_ADDRESS,
         "transfer(address,uint256)",
         { feeLimit: 150_000_000, expiration: 600_000 },  // 10-minute window (default is 60s)
@@ -151,18 +169,28 @@ router.post("/tron/build-transfer", async (req, res) => {
         ],
         tronWeb.address.toHex(fromAddress),
       ),
-    );
+    )) as TriggerSmartContractResponse;
 
     if (!result?.transaction) {
       return res.status(500).json({ error: "Failed to build transaction", detail: result });
     }
 
     return res.json({ transaction: result.transaction });
-  } catch (err: any) {
-    console.error("[build-transfer] error:", err?.message ?? err);
-    return res.status(500).json({ error: err?.message ?? "Failed to build transaction" });
+  } catch (err: unknown) {
+    const msg = errMessage(err);
+    console.error("[build-transfer] error:", msg);
+    return res.status(500).json({ error: msg || "Failed to build transaction" });
   }
 });
+
+interface AccountResourceResponse {
+  freeNetLimit?: number;
+  freeNetUsed?: number;
+  NetLimit?: number;
+  NetUsed?: number;
+  EnergyLimit?: number;
+  EnergyUsed?: number;
+}
 
 // ── Account resources proxy ────────────────────────────────────────────────
 // Uses /wallet/getaccountresource (not /v1/accounts) so that delegated-in
@@ -182,7 +210,7 @@ router.get("/tron/resources/:address", async (req, res) => {
         body: JSON.stringify({ address, visible: true }),
       },
     );
-    const data: any = await response.json();
+    const data = (await response.json()) as AccountResourceResponse;
 
     const freeNetLimit = data.freeNetLimit ?? 600;
     const freeNetUsed = data.freeNetUsed ?? 0;
@@ -200,11 +228,17 @@ router.get("/tron/resources/:address", async (req, res) => {
       availableEnergy,
       isSufficientForTRC20: availableBandwidth >= 300 && availableEnergy >= 13_000,
     });
-  } catch (err: any) {
-    console.error("[resources] error:", err?.message ?? err);
-    return res.status(500).json({ error: err?.message ?? "Failed to fetch resources" });
+  } catch (err: unknown) {
+    const msg = errMessage(err);
+    console.error("[resources] error:", msg);
+    return res.status(500).json({ error: msg || "Failed to fetch resources" });
   }
 });
+
+interface TrcTransactionsResponse {
+  data?: unknown[];
+  meta?: Record<string, unknown>;
+}
 
 // ── TRC-20 transaction history proxy ───────────────────────────────────────
 router.get("/tron/transactions/:address", async (req, res) => {
@@ -222,15 +256,16 @@ router.get("/tron/transactions/:address", async (req, res) => {
     if (fingerprint) url += `&fingerprint=${encodeURIComponent(fingerprint)}`;
 
     const response = await tronFetchWithRetry(url);
-    const json: any = await response.json();
+    const json = (await response.json()) as TrcTransactionsResponse;
 
     return res.json({
       data: Array.isArray(json.data) ? json.data : [],
       meta: json.meta ?? {},
     });
-  } catch (err: any) {
-    console.error("[transactions] error:", err?.message ?? err);
-    return res.status(500).json({ error: err?.message ?? "Failed to fetch transactions" });
+  } catch (err: unknown) {
+    const msg = errMessage(err);
+    console.error("[transactions] error:", msg);
+    return res.status(500).json({ error: msg || "Failed to fetch transactions" });
   }
 });
 
