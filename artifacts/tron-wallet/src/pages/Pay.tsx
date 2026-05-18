@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
-import { Copy, ExternalLink, Download, Zap, CheckCircle2, Loader2, X } from "lucide-react";
+import { Copy, Check, ExternalLink, Download, Zap, CheckCircle2, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { QRCodeCanvas } from "qrcode.react";
@@ -48,6 +48,7 @@ export function Pay() {
   const [peerState, setPeerState] = useState<PeerState>("checking");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
 
   useEffect(() => {
@@ -63,7 +64,9 @@ export function Pay() {
   const handleCopy = () => {
     if (address) {
       navigator.clipboard.writeText(address);
-      toast({ title: "Address Copied", description: "Paste it into the on-ramp checkout." });
+      setCopied(true);
+      toast({ title: "Address Copied", description: "Paste it into the Peer sidebar." });
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -182,7 +185,16 @@ export function Pay() {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">To wallet</span>
-            <span className="text-xs font-mono text-emerald-400">{formatAddress(address || "")}</span>
+            <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5">
+              {formatAddress(address || "")}
+              <button
+                onClick={handleCopy}
+                className="text-muted-foreground/50 hover:text-emerald-400 transition-colors"
+                title="Copy wallet address"
+              >
+                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              </button>
+            </span>
           </div>
         </div>
 
