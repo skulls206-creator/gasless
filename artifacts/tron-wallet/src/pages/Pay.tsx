@@ -48,6 +48,7 @@ export function Pay() {
 
   const [peerState, setPeerState] = useState<PeerState>("checking");
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
 
   useEffect(() => {
@@ -94,16 +95,25 @@ export function Pay() {
     }
 
     // Launch with TRON USDT pre-selected and deposit address pre-filled
-    sdkRef.current.onramp({
-      referrer: "gasless.khurk.xyz",
-      callbackUrl: window.location.origin,
-      toToken: TRON_USDT_TOKEN,
-      ...(address ? { recipientAddress: address } : {}),
-    });
+    setIsLaunching(true);
+    try {
+      sdkRef.current.onramp({
+        referrer: "gasless.khurk.xyz",
+        callbackUrl: window.location.origin,
+        toToken: TRON_USDT_TOKEN,
+        ...(address ? { recipientAddress: address } : {}),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error("[peer] onramp failed:", msg);
+      toast({ variant: "destructive", title: "Peer launch failed", description: msg });
+    } finally {
+      setIsLaunching(false);
+    }
   };
 
   const statusIcon = () => {
-    if (isConnecting || peerState === "checking") return <Loader2 className="w-4 h-4 mr-2 animate-spin" />;
+    if (isConnecting || isLaunching || peerState === "checking") return <Loader2 className="w-4 h-4 mr-2 animate-spin" />;
     if (peerState === "needs_install") return <Download className="w-4 h-4 mr-2" />;
     if (peerState === "needs_connection") return <Zap className="w-4 h-4 mr-2" />;
     if (peerState === "ready") return <CheckCircle2 className="w-4 h-4 mr-2 text-green-400" />;
@@ -112,6 +122,7 @@ export function Pay() {
 
   const statusLabel = () => {
     if (isConnecting) return "Connecting…";
+    if (isLaunching) return "Launching Peer…";
     if (peerState === "checking") return "Checking…";
     if (peerState === "needs_install") return "Install Peer Extension";
     if (peerState === "needs_connection") return "Connect Peer Extension";
@@ -168,7 +179,7 @@ export function Pay() {
         <Button
           className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
           onClick={handlePeerLaunch}
-          disabled={isConnecting || peerState === "checking" || peerState === "error"}
+          disabled={isConnecting || isLaunching || peerState === "checking" || peerState === "error"}
         >
           {statusIcon()}
           {statusLabel()}
