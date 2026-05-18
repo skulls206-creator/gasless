@@ -127,11 +127,11 @@ export function Pay() {
 
   const statusLabel = () => {
     if (isConnecting) return "Connecting…";
-    if (isLaunching) return "Launching Peer…";
+    if (isLaunching) return "Opening Peer…";
     if (peerState === "checking") return "Checking…";
     if (peerState === "needs_install") return "Install Peer Extension";
     if (peerState === "needs_connection") return "Connect Peer Extension";
-    if (peerState === "ready") return "Buy USDT on Peer";
+    if (peerState === "ready") return "Buy USDT via Peer";
     return "Unavailable";
   };
 
@@ -170,13 +170,13 @@ export function Pay() {
         </div>
 
         <div className="bg-black/20 rounded-xl p-3 space-y-1">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Will pre-fill</p>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Receiving</p>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Token</span>
             <span className="text-xs font-mono text-emerald-400">USDT (TRC-20)</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium">Deposit address</span>
+            <span className="text-xs font-medium">To wallet</span>
             <span className="text-xs font-mono text-emerald-400">{formatAddress(address || "")}</span>
           </div>
         </div>
@@ -190,6 +190,12 @@ export function Pay() {
           {statusLabel()}
         </Button>
 
+        {peerState === "ready" && (
+          <p className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
+            Opens the Peer sidebar — browse offers and buy USDT with Venmo, Revolut,
+            Cash App &amp; more. USDT lands in your wallet automatically.
+          </p>
+        )}
         {peerState === "needs_install" && (
           <p className="text-[11px] text-muted-foreground text-center">
             Requires the free Peer Chrome extension · Desktop only
