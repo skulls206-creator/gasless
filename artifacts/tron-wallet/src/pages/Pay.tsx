@@ -98,18 +98,12 @@ export function Pay() {
     // there so we use openSidebar with URL params instead.
     setIsLaunching(true);
     try {
-      // Pre-fill TRON USDT and recipient address in the Peer web app sidebar
+      // Open Peer sidebar to swap/buy page with TRON USDT pre-selected.
       const route = new URLSearchParams();
       route.set("tab", "buy");
       route.set("toChain", TRON_CHAIN_ID);
       route.set("toToken", TRON_USDT_CONTRACT);
-      if (address) {
-        // Try multiple param names — the web app swap page may use different
-        // naming than the SDK's onramp() params.
-        route.set("address", address);
-        route.set("recipientAddress", address);
-        route.set("recipient", address);
-      }
+      if (address) route.set("recipientAddress", address);
 
       const ext = (window as unknown as {
         peer?: { openSidebar?(r: string): void };
