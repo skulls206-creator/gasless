@@ -189,6 +189,18 @@ checkpoint `6b4e2df`) to `github.com/skulls206-creator/gasless`:
 - Verified via `GET /repos/.../git/refs/heads` and
   `GET /repos/.../branches/main`.
 
+## 2026-05-18 — Clean up Peer onramp: use peerExtensionSdk singleton per docs  (sha: d1014c0)
+**Satoshi.** Replaced manual query-string building and createPeerExtensionSdk
+with the sdk's `peerExtensionSdk` singleton. Removed `callbackUrl` (deprecated
+in extension 0.4.9+). Calls `onramp({referrer, toToken, recipientAddress})` as
+an object per Peer docs — the sdk handles query-string format internally.
+
+## 2026-05-18 — Peer onramp: call directly with intentHash + callback  (sha: 52dbda1)
+**Satoshi.** Switched back to calling window.peer.onramp() directly with a
+valid-format intentHash (required by extension for query-string validation)
+and a noop callback. Extension opened to "Send Payment" screen but didn't
+apply pre-fill params.
+
 ## 2026-05-18 — Fix GitHub Pages SPA routing, Peer onramp error handling, mark NEXT.md complete  (sha: bb2e03f)
 **Satoshi.** Added `public/404.html` with redirect to `/?/path` and SPA path
 restore script in `index.html`. Routes like `/backup`, `/pay/T...`, `/send?to=`
