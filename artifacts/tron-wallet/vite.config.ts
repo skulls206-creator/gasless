@@ -46,6 +46,7 @@ export default defineConfig({
       registerType: "prompt",
       injectManifest: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB
       },
       devOptions: {
         enabled: false,
