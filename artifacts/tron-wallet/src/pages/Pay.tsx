@@ -98,11 +98,13 @@ export function Pay() {
     setIsLaunching(true);
     try {
       (peerExtensionSdk as unknown as {
-        onramp(params: Record<string, string | undefined>): void;
+        onramp(params: Record<string, string | undefined>, cb: (r: unknown) => void): void;
       }).onramp({
         referrer: "Gasless",
         toToken: TRON_USDT_TOKEN,
         ...(address ? { recipientAddress: address } : {}),
+      }, (result) => {
+        console.log("[peer] onramp result:", result);
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
