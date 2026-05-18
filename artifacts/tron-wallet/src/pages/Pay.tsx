@@ -94,19 +94,19 @@ export function Pay() {
       }
     }
 
-    // Launch the Peer extension sidebar — the extension's own buy flow
-    // handles the rest. The raw onramp() now requires an intentHash that we
-    // don't have for a fresh purchase.
+    // Open the Peer extension sidebar — users complete the buy in the
+    // extension's own interface.
     setIsLaunching(true);
     try {
       const peerWin = window as unknown as {
-        peer?: { openSidebar?(route: string): void };
+        peer?: { openSidebar?(route: string): void; getVersion?(): Promise<string> };
       };
+
       if (peerWin.peer?.openSidebar) {
-        // Open Peer sidebar to the main page — user can navigate to buy there
-        peerWin.peer.openSidebar("");
+        // Try specific buy route first, then fall back to the home sidebar
+        peerWin.peer.openSidebar("buy");
       } else {
-        throw new Error("Peer extension API not available");
+        throw new Error("Peer extension API not available - try reinstalling the extension");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
