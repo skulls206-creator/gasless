@@ -93,27 +93,22 @@ export function Pay() {
       }
     }
 
-    // Open the Peer extension onramp with USDT TRC-20 pre-selected.
-    // The SDK builds the query string from the params object.
+    // Open the Peer sidebar to the swap/buy page with TRON USDT pre-selected.
+    // The extension's onramp() protocol is EVM-only — TRON isn't supported
+    // there so we use openSidebar with URL params instead.
     setIsLaunching(true);
     try {
-      // Call the extension directly — bypass the SDK's outdated onramp wrapper
-      // which throws if intentHash is missing. The extension itself (0.4.9+)
-      // accepts onramp(queryString, callback) without intentHash for new buy flow.
-      const searchParams = new URLSearchParams();
-      searchParams.set("referrer", "Gasless");
-      searchParams.set("toToken", TRON_USDT_TOKEN);
-      if (address) searchParams.set("recipientAddress", address);
-      // No callbackUrl (removed in 0.4.9), no intentHash (starts new buy)
-      const queryString = searchParams.toString();
+      const route = new URLSearchParams();
+      route.set("tab", "buy");
+      route.set("toChain", TRON_CHAIN_ID);
+      route.set("toToken", TRON_USDT_CONTRACT);
+      if (address) route.set("recipientAddress", address);
 
       const ext = (window as unknown as {
-        peer?: { onramp(q: string, cb: (r: unknown) => void): void };
+        peer?: { openSidebar?(r: string): void };
       }).peer;
-      if (ext?.onramp) {
-        ext.onramp(queryString, (result) => {
-          console.log("[peer] onramp result:", result);
-        });
+      if (ext?.openSidebar) {
+        ext.openSidebar("swap?" + route.toString());
       } else {
         throw new Error("Peer extension API not available");
       }
@@ -201,8 +196,8 @@ export function Pay() {
 
         {peerState === "ready" && (
           <p className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
-            Opens the Peer sidebar — browse offers and buy USDT with Venmo, Revolut,
-            Cash App &amp; more. USDT lands in your wallet automatically.
+            Opens the Peer sidebar to the buy page with TRON USDT pre-selected.
+            Complete your purchase with Venmo, Revolut, Cash App &amp; more.
           </p>
         )}
         {peerState === "needs_install" && (
