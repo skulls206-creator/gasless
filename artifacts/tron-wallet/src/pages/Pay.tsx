@@ -97,12 +97,24 @@ export function Pay() {
     // Launch with TRON USDT pre-selected and deposit address pre-filled
     setIsLaunching(true);
     try {
-      sdkRef.current.onramp({
-        referrer: "gasless.khurk.xyz",
-        callbackUrl: window.location.origin,
-        toToken: TRON_USDT_TOKEN,
-        ...(address ? { recipientAddress: address } : {}),
-      });
+      // The Peer extension's onramp requires both a query string and a callback.
+      // The installed SDK (v0.1.0-rc.14) only passes the query string, so we
+      // build and call it directly.
+      const searchParams = new URLSearchParams();
+      searchParams.set("referrer", "gasless.khurk.xyz");
+      searchParams.set("callbackUrl", window.location.origin);
+      searchParams.set("toToken", TRON_USDT_TOKEN);
+      if (address) searchParams.set("recipientAddress", address);
+      const queryString = searchParams.toString();
+
+      const peerWin = window as unknown as { peer?: { onramp?(q: string, cb: (r: unknown) => void): void } };
+      if (peerWin.peer?.onramp) {
+        peerWin.peer.onramp(queryString, (result) => {
+          console.log("[peer] onramp callback:", result);
+        });
+      } else {
+        throw new Error("Peer extension API not available");
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error("[peer] onramp failed:", msg);

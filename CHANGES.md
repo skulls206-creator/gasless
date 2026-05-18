@@ -189,10 +189,12 @@ checkpoint `6b4e2df`) to `github.com/skulls206-creator/gasless`:
 - Verified via `GET /repos/.../git/refs/heads` and
   `GET /repos/.../branches/main`.
 
-## 2026-05-18 — Fix GitHub Pages SPA routing (all routes 404'd)  (sha: pending)
+## 2026-05-18 — Fix GitHub Pages SPA routing, Peer onramp error handling, mark NEXT.md complete  (sha: bb2e03f)
 **Satoshi.** Added `public/404.html` with redirect to `/?/path` and SPA path
 restore script in `index.html`. Routes like `/backup`, `/pay/T...`, `/send?to=`
-now work on `gasless.khurk.xyz` instead of returning 404.
+now work on `gasless.khurk.xyz` instead of returning 404. Wrapped Peer onramp
+call in try/catch + added `isLaunching` state for visual feedback. Marked all
+completed NEXT.md items as done.
 
 ## Backlog
 
