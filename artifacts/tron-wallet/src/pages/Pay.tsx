@@ -97,10 +97,18 @@ export function Pay() {
     // The SDK builds the query string from the params object.
     setIsLaunching(true);
     try {
+      // Generate a deterministic intentHash for this session.
+      // The extension validates the bytes32 format but doesn't require a
+      // real on-chain intent when starting a new buy flow.
+      const intentHash = "0x" + Array.from(
+        new TextEncoder().encode("gasless-" + (address ?? "") + "-" + Date.now())
+      ).map(b => b.toString(16).padStart(2, "0")).join("").padEnd(64, "0").slice(0, 64);
+
       (peerExtensionSdk as unknown as {
         onramp(params: Record<string, string | undefined>, cb: (r: unknown) => void): void;
       }).onramp({
         referrer: "Gasless",
+        intentHash,
         toToken: TRON_USDT_TOKEN,
         ...(address ? { recipientAddress: address } : {}),
       }, (result) => {
