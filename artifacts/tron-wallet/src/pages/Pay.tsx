@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
 import { Copy, ExternalLink, Download, Zap, CheckCircle2, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatAddress } from "@/lib/utils";
-import { createPeerExtensionSdk } from "@zkp2p/sdk";
+import { peerExtensionSdk } from "@zkp2p/sdk";
 
 // TRON mainnet chain ID · USDT TRC-20 contract
 const TRON_CHAIN_ID = "728126428";
@@ -44,7 +44,6 @@ const BACKUP_ONRAMPS = [
 export function Pay() {
   const { address } = useWallet();
   const { toast } = useToast();
-  const sdkRef = useRef(createPeerExtensionSdk({ window }));
 
   const [peerState, setPeerState] = useState<PeerState>("checking");
   const [isConnecting, setIsConnecting] = useState(false);
@@ -53,7 +52,7 @@ export function Pay() {
 
   useEffect(() => {
     let cancelled = false;
-    sdkRef.current.getState().then((s) => {
+    peerExtensionSdk.getState().then((s) => {
       if (!cancelled) setPeerState(s as PeerState);
     }).catch(() => {
       if (!cancelled) setPeerState("error");
@@ -69,7 +68,7 @@ export function Pay() {
   };
 
   const handlePeerLaunch = async () => {
-    const state = await sdkRef.current.getState();
+    const state = await peerExtensionSdk.getState();
     setPeerState(state as PeerState);
 
     if (state === "needs_install") {
@@ -80,7 +79,7 @@ export function Pay() {
     if (state === "needs_connection") {
       setIsConnecting(true);
       try {
-        const approved = await sdkRef.current.requestConnection();
+        const approved = await peerExtensionSdk.requestConnection();
         if (!approved) {
           toast({ variant: "destructive", title: "Connection declined", description: "Approve the connection in the Peer side panel to continue." });
           return;
@@ -94,33 +93,17 @@ export function Pay() {
       }
     }
 
-    // Call the extension's onramp with USDT TRC-20 pre-selected as the
-    // receive token. The extension now requires intentHash in the query
-    // string — we include it so the extension opens with pre-filled params.
+    // Open the Peer extension onramp with USDT TRC-20 pre-selected.
+    // The SDK builds the query string from the params object.
     setIsLaunching(true);
     try {
-      const peerWin = window as unknown as {
-        peer?: { onramp?(q: string, cb: (r: unknown) => void): void };
-      };
-
-      if (peerWin.peer?.onramp) {
-        const searchParams = new URLSearchParams();
-        searchParams.set("referrer", "gasless.khurk.xyz");
-        searchParams.set("callbackUrl", window.location.origin);
-        searchParams.set("toToken", TRON_USDT_TOKEN);
-        searchParams.set("recipientAddress", address ?? "");
-        // Generate a deterministic session marker so the extension has a
-        // valid-format bytes32 hash to pass the query-string validator.
-        const hash = "0x" + "0000000000000000000000000000000000000000000000000000000000000001";
-        searchParams.set("intentHash", hash);
-        const queryString = searchParams.toString();
-
-        peerWin.peer.onramp(queryString, (result) => {
-          console.log("[peer] onramp callback:", result);
-        });
-      } else {
-        throw new Error("Peer extension API not available");
-      }
+      (peerExtensionSdk as unknown as {
+        onramp(params: Record<string, string | undefined>): void;
+      }).onramp({
+        referrer: "Gasless",
+        toToken: TRON_USDT_TOKEN,
+        ...(address ? { recipientAddress: address } : {}),
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error("[peer] launch failed:", msg);
@@ -319,7 +302,7 @@ export function Pay() {
               <Button
                 className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white"
                 onClick={() => {
-                  sdkRef.current.openInstallPage();
+                  peerExtensionSdk.openInstallPage();
                   setShowInstallModal(false);
                 }}
               >
