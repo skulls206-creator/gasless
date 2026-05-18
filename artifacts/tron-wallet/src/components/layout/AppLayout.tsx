@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { InstallPWA } from "@/components/ui/InstallPWA";
+import { PageContextMenu } from "@/components/ui/PageContextMenu";
 
 
 interface AppLayoutProps {
@@ -55,17 +56,19 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       {/* Main Content Area */}
       <main className="flex-1 relative z-10 w-full max-w-lg mx-auto pb-24 px-4 pt-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
+        <PageContextMenu>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+        </PageContextMenu>
       </main>
 
       <InstallPWA />
