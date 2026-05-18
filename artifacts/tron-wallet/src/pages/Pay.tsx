@@ -94,30 +94,23 @@ export function Pay() {
       }
     }
 
-    // Launch with TRON USDT pre-selected and deposit address pre-filled
+    // Launch the Peer extension sidebar — the extension's own buy flow
+    // handles the rest. The raw onramp() now requires an intentHash that we
+    // don't have for a fresh purchase.
     setIsLaunching(true);
     try {
-      // The Peer extension's onramp requires both a query string and a callback.
-      // The installed SDK (v0.1.0-rc.14) only passes the query string, so we
-      // build and call it directly.
-      const searchParams = new URLSearchParams();
-      searchParams.set("referrer", "gasless.khurk.xyz");
-      searchParams.set("callbackUrl", window.location.origin);
-      searchParams.set("toToken", TRON_USDT_TOKEN);
-      if (address) searchParams.set("recipientAddress", address);
-      const queryString = searchParams.toString();
-
-      const peerWin = window as unknown as { peer?: { onramp?(q: string, cb: (r: unknown) => void): void } };
-      if (peerWin.peer?.onramp) {
-        peerWin.peer.onramp(queryString, (result) => {
-          console.log("[peer] onramp callback:", result);
-        });
+      const peerWin = window as unknown as {
+        peer?: { openSidebar?(route: string): void };
+      };
+      if (peerWin.peer?.openSidebar) {
+        // Open Peer sidebar to the main page — user can navigate to buy there
+        peerWin.peer.openSidebar("");
       } else {
         throw new Error("Peer extension API not available");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      console.error("[peer] onramp failed:", msg);
+      console.error("[peer] launch failed:", msg);
       toast({ variant: "destructive", title: "Peer launch failed", description: msg });
     } finally {
       setIsLaunching(false);
