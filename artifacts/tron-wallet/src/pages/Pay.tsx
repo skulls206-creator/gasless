@@ -104,8 +104,9 @@ export function Pay() {
       // Open Peer sidebar to swap/buy page with TRON USDT pre-selected.
       const route = new URLSearchParams();
       route.set("tab", "buy");
+      // Combined chain:token format that the onramp SDK uses
+      route.set("toToken", `${TRON_CHAIN_ID}:${TRON_USDT_CONTRACT}`);
       route.set("toChain", TRON_CHAIN_ID);
-      route.set("toToken", TRON_USDT_CONTRACT);
       if (address) route.set("recipientAddress", address);
 
       const ext = (window as unknown as {
