@@ -97,23 +97,26 @@ export function Pay() {
     // The SDK builds the query string from the params object.
     setIsLaunching(true);
     try {
-      // Generate a deterministic intentHash for this session.
-      // The extension validates the bytes32 format but doesn't require a
-      // real on-chain intent when starting a new buy flow.
-      const intentHash = "0x" + Array.from(
-        new TextEncoder().encode("gasless-" + (address ?? "") + "-" + Date.now())
-      ).map(b => b.toString(16).padStart(2, "0")).join("").padEnd(64, "0").slice(0, 64);
+      // Call the extension directly — bypass the SDK's outdated onramp wrapper
+      // which throws if intentHash is missing. The extension itself (0.4.9+)
+      // accepts onramp(queryString, callback) without intentHash for new buy flow.
+      const searchParams = new URLSearchParams();
+      searchParams.set("referrer", "Gasless");
+      searchParams.set("toToken", TRON_USDT_TOKEN);
+      if (address) searchParams.set("recipientAddress", address);
+      // No callbackUrl (removed in 0.4.9), no intentHash (starts new buy)
+      const queryString = searchParams.toString();
 
-      (peerExtensionSdk as unknown as {
-        onramp(params: Record<string, string | undefined>, cb: (r: unknown) => void): void;
-      }).onramp({
-        referrer: "Gasless",
-        intentHash,
-        toToken: TRON_USDT_TOKEN,
-        ...(address ? { recipientAddress: address } : {}),
-      }, (result) => {
-        console.log("[peer] onramp result:", result);
-      });
+      const ext = (window as unknown as {
+        peer?: { onramp(q: string, cb: (r: unknown) => void): void };
+      }).peer;
+      if (ext?.onramp) {
+        ext.onramp(queryString, (result) => {
+          console.log("[peer] onramp result:", result);
+        });
+      } else {
+        throw new Error("Peer extension API not available");
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error("[peer] launch failed:", msg);
