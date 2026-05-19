@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { TronWeb } from "tronweb";
 import {
   isSponsorConfigured,
@@ -26,16 +27,33 @@ const USDT_CONTRACT_HEX = "a614f803b6fd780986a42c78ec9c7f77e6ded13c"; // without
 const FEE_AMOUNT = 1; // USDT
 
 function getFeeRecipient(): string | null {
-  return process.env.FEE_RECIPIENT_ADDRESS || process.env.SPONSOR_ADDRESS || null;
+  const addr = process.env.FEE_RECIPIENT_ADDRESS || process.env.SPONSOR_ADDRESS || null;
+  if (addr && !addr.startsWith("T")) {
+    console.warn("[gasless] Fee recipient is not a valid TRON address");
+    return null;
+  }
+  return addr;
 }
 
 const router: IRouter = Router();
 
+const adminRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many admin requests — please slow down." },
+});
+
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const secret = process.env.ADMIN_SECRET;
-  if (!secret) return next(); // No secret set → open (dev/initial setup mode)
-  const provided = req.headers["x-admin-secret"] || req.query.secret;
-  if (provided !== secret) {
+  if (!secret) {
+    console.warn("ADMIN_SECRET not set — admin endpoints are DISABLED. Set ADMIN_SECRET in env for production.");
+    return res.status(403).json({ error: "forbidden", message: "Admin API is not configured. Set ADMIN_SECRET to enable." });
+  }
+  const provided = req.headers["x-admin-secret"];
+  if (!provided || provided !== secret) {
+    console.warn(`[ADMIN] Unauthorized admin access attempt from IP: ${req.ip}`);
     return res.status(401).json({ error: "Unauthorized" });
   }
   return next();
@@ -405,7 +423,12 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
       }
     }
 
-    res.json({ txid, feeTxid, feeError, sponsored });
+    res.json({
+      txid,
+      feeTxid,
+      sponsored,
+      feeError: feeError ? "Fee transaction failed — please contact support if issue persists" : undefined,
+    });
   } catch (err: unknown) {
     console.error("[gasless-send] error:", err);
     res.status(500).json({ error: errMessage(err) || "Transaction failed" });
@@ -414,7 +437,7 @@ router.post("/gasless-send", async (req, res): Promise<void> => {
 
 // ── Admin endpoints (protected) ────────────────────────────────────────────
 
-router.get("/admin/status", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/admin/status", adminRateLimiter, requireAdmin, async (_req, res): Promise<void> => {
   try {
     // Read live energy unit price from the shared cached source so the
     // dashboard agrees with the runtime decision in ensureUserReadyForSend.
@@ -469,12 +492,12 @@ router.get("/admin/status", requireAdmin, async (_req, res): Promise<void> => {
   }
 });
 
-router.post("/admin/stake", requireAdmin, async (req, res): Promise<void> => {
+router.post("/admin/stake", adminRateLimiter, requireAdmin, async (req, res): Promise<void> => {
   const { amountTRX } = req.body;
   const amount = parseFloat(amountTRX);
 
-  if (isNaN(amount) || amount <= 0) {
-    res.status(400).json({ error: "amountTRX must be a positive number" });
+  if (typeof amountTRX !== "number" || isNaN(amount) || !isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "amountTRX must be a finite positive number" });
     return;
   }
 

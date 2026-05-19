@@ -53,8 +53,11 @@ router.post("/swap/quote", async (req, res) => {
       amount_type: "from",
     });
 
+        // Note: Trocador requires the API key as a query parameter (not a header).
+    // This is a constraint of their API design.
     if (TROCADOR_API_KEY) {
       params.set("api_key", TROCADOR_API_KEY);
+      console.log("[swap/quote] Trocador API key configured");
     }
 
     const resp = await fetch(`${TROCADOR_API_BASE}/info?${params.toString()}`, {
@@ -117,8 +120,11 @@ router.post("/swap/create", async (req, res) => {
       to_network: "trx",
     };
 
+    // Note: Trocador requires the API key as a request body field (not a header).
+    // This is a constraint of their API design.
     if (TROCADOR_API_KEY) {
       body["api_key"] = TROCADOR_API_KEY;
+      console.log("[swap/create] Trocador API key configured");
     }
 
     if (route?.provider && typeof route.provider === "string") {
@@ -161,7 +167,10 @@ router.get("/swap/status/:orderId", async (req, res) => {
 
   try {
     const params = new URLSearchParams({ id: orderId });
-    if (TROCADOR_API_KEY) params.set("api_key", TROCADOR_API_KEY);
+    if (TROCADOR_API_KEY) {
+      params.set("api_key", TROCADOR_API_KEY);
+      console.log("[swap/status] Trocador API key configured");
+    }
 
     const resp = await fetch(`${TROCADOR_API_BASE}/status?${params.toString()}`, {
       headers: { "Accept": "application/json" },

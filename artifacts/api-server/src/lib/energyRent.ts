@@ -198,6 +198,12 @@ async function getFeeeBalance(): Promise<number> {
 }
 
 // ── ERP (EnergyRentPro) provider ───────────────────────────────────────────
+//
+// ⚠️ NOTE: ERP requires the API key as a query parameter (?apiKey=...) in the URL.
+//    This is a constraint of their API design — there is no header-based auth option.
+//    The key is transmitted over HTTPS so it is encrypted in transit, but it will
+//    appear in server access logs. If this is a concern, consider using the "feee"
+//    provider instead, which sends the key as a header.
 
 async function rentViaERP(
   userAddress: string,
@@ -300,7 +306,10 @@ export async function getRentalBalance(): Promise<{
     const trxBalance    = provider === "erp" ? await getERPBalance() : await getFeeeBalance();
     // Heuristic cost per send: feee V3 ~0.013 TRX (5-min, 65k energy);
     // erp ~2.86 TRX (1-hour, 44 SUN/energy). Used only for admin telemetry.
-    const costPerSend   = provider === "erp" ? 2.86 : 0.013;
+    // Overridable via ENERGY_RENT_COST_PER_SEND_ERP and ENERGY_RENT_COST_PER_SEND_FEEE.
+    const costPerSend = provider === "erp"
+      ? parseFloat(process.env.ENERGY_RENT_COST_PER_SEND_ERP ?? "2.86")
+      : parseFloat(process.env.ENERGY_RENT_COST_PER_SEND_FEEE ?? "0.013");
     return {
       provider,
       trxBalance,
