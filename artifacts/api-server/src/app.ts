@@ -5,6 +5,10 @@ import router from "./routes";
 
 const app: Express = express();
 
+// Enable "trust proxy" so express-rate-limit sees the correct client IP
+// when running behind Replit's proxy or other load balancers.
+app.set("trust proxy", 1);
+
 // ── CORS ───────────────────────────────────────────────────────────────────
 // Production split: the API runs on Replit, the frontend ships to GitHub
 // Pages at gasless.khurk.xyz. We allowlist by exact origin match.

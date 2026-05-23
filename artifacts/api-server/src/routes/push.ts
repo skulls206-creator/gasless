@@ -1,10 +1,11 @@
-import { Router, type IRouter, type Request, type Response as ExpressResponse, type NextFunction } from "express";
+import { Router, type IRouter } from "express";
 import webpush from "web-push";
 import { db } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getTronGridHeaders } from "./tron.js";
 import { getSponsorStatus, isSponsorConfigured, errMessage } from "../lib/sponsor.js";
+import { requireAdmin } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
@@ -37,14 +38,6 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 }
 
-function requireAdmin(req: Request, res: ExpressResponse, next: NextFunction) {
-  const secret = process.env.ADMIN_SECRET;
-  if (!secret) return next();
-  const provided = req.headers["x-admin-secret"] ?? (req.query.secret as string | undefined);
-  if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
-  return next();
-}
-
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 router.get("/push/vapid-key", (_req, res) => {
@@ -59,6 +52,11 @@ router.post("/push/subscribe", async (req, res) => {
 
   if (!address || !subscription?.endpoint || !subscription.keys) {
     return res.status(400).json({ error: "Missing address or subscription" });
+  }
+
+  // Basic TRON address validation (base58 starts with T, exactly 34 chars)
+  if (typeof address !== "string" || !address.startsWith("T") || address.length !== 34) {
+    return res.status(400).json({ error: "Invalid TRON address format" });
   }
 
   try {

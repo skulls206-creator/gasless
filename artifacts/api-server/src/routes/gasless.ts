@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { TronWeb } from "tronweb";
 import {
@@ -20,6 +20,7 @@ import {
   type SponsorStatus,
 } from "../lib/sponsor.js";
 import { isRentalConfigured, rentEnergyForUser, getRentalBalance } from "../lib/energyRent.js";
+import { requireAdmin } from "../middlewares/auth.js";
 
 // USDT (TRC-20) contract address on TRON mainnet
 const USDT_CONTRACT_HEX = "a614f803b6fd780986a42c78ec9c7f77e6ded13c"; // without leading 41
@@ -44,20 +45,6 @@ const adminRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many admin requests — please slow down." },
 });
-
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const secret = process.env.ADMIN_SECRET;
-  if (!secret) {
-    console.warn("ADMIN_SECRET not set — admin endpoints are DISABLED. Set ADMIN_SECRET in env for production.");
-    return res.status(403).json({ error: "forbidden", message: "Admin API is not configured. Set ADMIN_SECRET to enable." });
-  }
-  const provided = req.headers["x-admin-secret"];
-  if (!provided || provided !== secret) {
-    console.warn(`[ADMIN] Unauthorized admin access attempt from IP: ${req.ip}`);
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  return next();
-}
 
 /**
  * Validate a signed TRON transaction object:
